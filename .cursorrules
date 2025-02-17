@@ -3,13 +3,15 @@ You are an expert in Next.js, React, typescript, Node.js, Tailwind CSS, and Fire
 General Rules
   - When given a prompt, think carefully about the problem. Think deeply about the problem. Think carefully about all files involved. Thoroughly examine the code of all relevant files. Only after you have thought deeply about the problem, examined all the involved files, and examined the code in those files, then you should come up with a solution.
   - Use functional and declarative programming practices. Avoid OOP and classes.
-  - Prefer iteration and modularization to follow DRY (Don't Repeat Yourself) principles. Minimize code duplication.
+  - Prefer iteration and modularization to follow DRY (Dont Repeat Yourself) principles. Minimize code duplication.
   - Use the Receive an Object, Return an Object (RORO) pattern where applicable.
   - Utilize feature-based modular (vertical slice architecture) code organization rather than file-based (horizontal slice architecture).
   - Favor named exports for components.
-  - Global types should be stored in `types/`. Be sure to check these files for any type definitions.
-  
-  Naming Conventions
+  - Global types should be stored in `src/shared/types/`. Be sure to check these files for any type definitions.
+  - When in doubt or if unclear, ask the user for clarification.
+  - If a prompt ends with "Discuss.", engage in a discussion rather than writing code.
+
+Naming Conventions
   - Use descriptive, semantic variable names with auxiliary verbs (e.g., `isLoading`, `hasError`).
   - Use lowercase with dashes for directories and files (e.g., `components/auth-wizard`).
 
@@ -24,6 +26,7 @@ TypeScript Usage
 React Usage
  - Use functional components and TypeScript interfaces.
  - Use Shadcn UI, Radix, and Tailwind Aria for components and styling.
+ - Use Shadcn UI components for styling. To install shadcn/ui, run `npx shadcn@latest add`. Do not use the deprecated `shadcn-ui` package.
  - Implement responsive design with Tailwind CSS.
  - Use content variables for static content outside render functions.
 
@@ -44,3 +47,51 @@ Backend and Database
  - Follow Firebase guidelines for security and performance.
  - Use Firebase Auth for user authentication and management.
 
+The project directory structure is as below:
+```
+.
+├── commonstandards
+├── eslint.config.mjs
+├── next.config.ts
+├── next-env.d.ts
+├── package.json
+├── package-lock.json
+├── postcss.config.mjs
+├── ProjectDocs
+│   └── PRD.md
+├── public
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
+├── README.md
+├── src
+│   ├── app
+│   │   ├── favicon.ico
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   └── page.tsx
+│   ├── features
+│   │   ├── graph-map
+│   │   │   ├── components
+│   │   │   ├── hooks
+│   │   │   ├── services
+│   │   │   ├── types
+│   │   │   └── utils
+│   │   └── progress-tracking
+│   │       ├── components
+│   │       ├── hooks
+│   │       ├── services
+│   │       ├── types
+│   │       └── utils
+│   └── shared
+│       ├── components # shared components
+│       ├── hooks # shared hooks
+│       ├── services # shared services
+│       ├── styles # shared styles
+│       ├── types # shared types
+│       └── utils # shared utils
+├── tailwind.config.ts
+└── tsconfig.json
+```
