@@ -138,8 +138,6 @@
 */
 
 :root {
-  --background: hsl(0 0% 100%);
-  --foreground: hsl(240 10% 3.9%);
   --card: hsl(0 0% 100%);
   --card-foreground: hsl(240 10% 3.9%);
   --popover: hsl(0 0% 100%);
@@ -163,6 +161,8 @@
   --chart-4: hsl(43 74% 66%);
   --chart-5: hsl(27 87% 67%);
   --radius: 0.6rem;
+  --background: hsl(0 0% 100%);
+  --foreground: hsl(240 10% 3.9%);
 }
 
 /*

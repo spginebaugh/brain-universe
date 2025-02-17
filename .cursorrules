@@ -26,7 +26,7 @@ TypeScript Usage
 React Usage
  - Use functional components and TypeScript interfaces.
  - Use Shadcn UI, Radix, and Tailwind Aria for components and styling.
- - Use Shadcn UI components for styling. To install shadcn/ui, run `npx shadcn@latest add`. Do not use the deprecated `shadcn-ui` package.
+ - Use Shadcn UI components for styling. To install shadcn/ui, run `npx shadcn@canary add`. Do not use the deprecated `shadcn-ui` package.
  - Implement responsive design with Tailwind CSS.
  - Use content variables for static content outside render functions.
 
