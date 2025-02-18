@@ -1,28 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
-
-export const protectedPaths = [
-  '/dashboard',
-  '/standards-graph',
-  '/standards-graph/*'  // Protect any subroutes under standards-graph
-];
+export const protectedPaths = ['/standards-graph', '/standards-graph/*'];
 export const authPaths = ['/sign-in', '/sign-up'];
 
-export const handleProtectedRoute = (request: NextRequest) => {
-  const authSession = request.cookies.get('__session')?.value;
-  
-  if (!authSession) {
-    return NextResponse.redirect(new URL('/sign-in', request.url));
-  }
-  
+export const handleProtectedRoute = () => {
+  // We'll handle auth client-side since we can't access Firebase Auth in middleware
   return null;
 };
 
-export const handleAuthRoute = (request: NextRequest) => {
-  const authSession = request.cookies.get('__session')?.value;
-  
-  if (authSession) {
-    return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
-  
+export const handleAuthRoute = () => {
+  // We'll handle auth client-side since we can't access Firebase Auth in middleware
   return null;
 }; 

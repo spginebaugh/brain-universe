@@ -1,6 +1,6 @@
-import { getApps, initializeApp } from 'firebase/app';
+import { getApp, getApps, initializeApp } from 'firebase/app';
 import { getAnalytics } from 'firebase/analytics';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
@@ -15,14 +15,19 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-export const firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
 // Initialize auth on the client side immediately
-export const auth = typeof window !== 'undefined' ? getAuth(firebaseApp) : null;
+export const auth = typeof window !== 'undefined' ? getAuth(app) : null;
+
+// Set persistence to local if we're on the client side
+if (typeof window !== 'undefined' && auth) {
+  setPersistence(auth, browserLocalPersistence);
+}
 
 // Initialize server-safe Firebase services
-export const db = getFirestore(firebaseApp);
-export const storage = getStorage(firebaseApp);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
 
 // Analytics is optional and only available on the client side
 export let analytics: ReturnType<typeof getAnalytics> | null = null;
@@ -35,6 +40,6 @@ export const initializeFirebaseServices = () => {
   
   // Initialize analytics if not already initialized
   if (!analytics) {
-    analytics = getAnalytics(firebaseApp);
+    analytics = getAnalytics(app);
   }
 }; 
