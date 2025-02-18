@@ -9,6 +9,7 @@ import {
   User,
   UserCredential,
   updateProfile,
+  Auth,
 } from 'firebase/auth';
 import { auth } from '@/shared/services/firebase/config';
 import { mapFirebaseError } from '../utils/error-mapper';
@@ -27,6 +28,16 @@ export interface SignUpCredentials extends AuthCredentials {
 // Re-export types for convenience
 export type { AuthCredentials as SignInCredentials };
 
+const ensureAuth = (): Auth => {
+  if (typeof window === 'undefined') {
+    throw new Error('Firebase Auth cannot be used on the server side. This method should only be called in client components.');
+  }
+  if (!auth) {
+    throw new Error('Firebase Auth is not initialized. This can happen if you are trying to use auth in a server component.');
+  }
+  return auth;
+};
+
 export const authService = {
   /**
    * Initialize auth state listener
@@ -34,7 +45,8 @@ export const authService = {
    * @returns Unsubscribe function
    */
   initializeAuthListener: (onAuthStateChange: (user: User | null) => void) => {
-    return onAuthStateChanged(auth, onAuthStateChange);
+    const authInstance = ensureAuth();
+    return onAuthStateChanged(authInstance, onAuthStateChange);
   },
 
   /**
@@ -42,7 +54,8 @@ export const authService = {
    */
   signUp: async ({ email, password, displayName }: SignUpCredentials): Promise<UserCredential> => {
     try {
-      const result = await createUserWithEmailAndPassword(auth, email, password);
+      const authInstance = ensureAuth();
+      const result = await createUserWithEmailAndPassword(authInstance, email, password);
       
       if (displayName) {
         await updateProfile(result.user, { displayName });
@@ -59,7 +72,8 @@ export const authService = {
    */
   signIn: async ({ email, password }: AuthCredentials): Promise<UserCredential> => {
     try {
-      return await signInWithEmailAndPassword(auth, email, password);
+      const authInstance = ensureAuth();
+      return await signInWithEmailAndPassword(authInstance, email, password);
     } catch (error) {
       throw mapFirebaseError(error);
     }
@@ -70,7 +84,8 @@ export const authService = {
    */
   signInWithGoogle: async (): Promise<UserCredential> => {
     try {
-      return await signInWithPopup(auth, googleProvider);
+      const authInstance = ensureAuth();
+      return await signInWithPopup(authInstance, googleProvider);
     } catch (error) {
       throw mapFirebaseError(error);
     }
@@ -81,7 +96,8 @@ export const authService = {
    */
   signOut: async (): Promise<void> => {
     try {
-      await firebaseSignOut(auth);
+      const authInstance = ensureAuth();
+      await firebaseSignOut(authInstance);
     } catch (error) {
       throw mapFirebaseError(error);
     }
@@ -92,7 +108,8 @@ export const authService = {
    */
   resetPassword: async (email: string): Promise<void> => {
     try {
-      await sendPasswordResetEmail(auth, email);
+      const authInstance = ensureAuth();
+      await sendPasswordResetEmail(authInstance, email);
     } catch (error) {
       throw mapFirebaseError(error);
     }

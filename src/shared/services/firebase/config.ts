@@ -17,15 +17,24 @@ const firebaseConfig = {
 // Initialize Firebase
 export const firebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 
-// Initialize Firebase services
-export const initializeFirebaseServices = () => {
-  if (typeof window !== 'undefined') {
-    // Only initialize analytics on the client side
-    getAnalytics(firebaseApp);
-  }
-};
+// Initialize auth on the client side immediately
+export const auth = typeof window !== 'undefined' ? getAuth(firebaseApp) : null;
 
-// Export Firebase service instances
-export const auth = getAuth(firebaseApp);
+// Initialize server-safe Firebase services
 export const db = getFirestore(firebaseApp);
-export const storage = getStorage(firebaseApp); 
+export const storage = getStorage(firebaseApp);
+
+// Analytics is optional and only available on the client side
+export let analytics: ReturnType<typeof getAnalytics> | null = null;
+
+// Initialize client-side Firebase services
+export const initializeFirebaseServices = () => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  
+  // Initialize analytics if not already initialized
+  if (!analytics) {
+    analytics = getAnalytics(firebaseApp);
+  }
+}; 

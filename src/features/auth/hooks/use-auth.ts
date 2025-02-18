@@ -5,16 +5,16 @@ import { useAuthStore } from '../stores/auth-store';
 import { authService } from '../services/auth-service';
 
 export const useAuth = () => {
-  const { user, isLoading, error } = useAuthStore();
+  const { user, status, error, initializeAuthListener } = useAuthStore();
 
   useEffect(() => {
-    const unsubscribe = authService.initializeAuthListener();
+    const unsubscribe = initializeAuthListener();
     return () => unsubscribe();
-  }, []);
+  }, [initializeAuthListener]);
 
   return {
     user,
-    isLoading,
+    isLoading: status === 'loading',
     error,
     isAuthenticated: !!user,
     signIn: authService.signIn,

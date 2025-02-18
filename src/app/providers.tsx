@@ -17,12 +17,14 @@ export function Providers({ children }: ProvidersProps) {
   const initializeAuthListener = useAuthStore(state => state.initializeAuthListener);
 
   useEffect(() => {
-    // Initialize Firebase services on the client side
-    initializeFirebaseServices();
-    
-    // Initialize auth listener from the store
-    const unsubscribe = initializeAuthListener();
-    return () => unsubscribe();
+    if (typeof window !== 'undefined') {
+      // Initialize Firebase services on the client side
+      initializeFirebaseServices();
+      
+      // Initialize auth listener from the store
+      const unsubscribe = initializeAuthListener();
+      return () => unsubscribe();
+    }
   }, [initializeAuthListener]);
 
   return (
