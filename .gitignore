@@ -40,6 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-commonstandards/
-public/commonstandards/
-scripts/data-migration/processed_JSON/
+/commonstandards/
+/public/commonstandards/
+/scripts/data-migration/processed_JSON/
