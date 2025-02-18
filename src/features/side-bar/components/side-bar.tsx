@@ -1,8 +1,9 @@
 'use client';
 
-import { Network } from 'lucide-react';
+import { Network, ShoppingCart } from 'lucide-react';
 import { useGraphStore } from '@/shared/stores/graph-store';
 import { useStandardsData } from '@/shared/hooks/use-standards-data';
+import { useShopStore } from '@/shared/stores/shop-store';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,6 +18,7 @@ interface SideBarProps {
 export const SideBar = ({ className = '' }: SideBarProps) => {
   const { enterPlacementMode } = useGraphStore();
   const { data: standardsData } = useStandardsData();
+  const { toggleShop } = useShopStore();
 
   const handleNodeSelect = (nodeId: string) => {
     if (standardsData) {
@@ -53,6 +55,14 @@ export const SideBar = ({ className = '' }: SideBarProps) => {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <button
+        onClick={toggleShop}
+        className="w-10 h-10 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+        title="Shop"
+      >
+        <ShoppingCart className="w-6 h-6" />
+      </button>
     </div>
   );
 };

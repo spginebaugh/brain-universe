@@ -3,13 +3,14 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 
 import { SideBar } from '@/features/side-bar/components/side-bar';
+import { ShopPanel } from '@/features/shop-panel/components/shop-panel';
 import { Providers } from './providers';
 
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'Brain Universe',
-  description: 'Explore and learn with interactive knowledge graphs',
+  description: 'Your learning journey starts here',
 };
 
 export default function RootLayout({
@@ -23,6 +24,7 @@ export default function RootLayout({
         <Providers>
           <div className="flex">
             <SideBar />
+            <ShopPanel />
             <main className="flex-1 ml-16">
               {children}
             </main>
