@@ -1,4 +1,7 @@
 import { Position, BoundaryCircle } from '../types/graph';
+import { createCoordinateTransform } from '@/shared/services/coordinate-transform';
+
+const transformService = createCoordinateTransform();
 
 /**
  * Converts polar coordinates to cartesian coordinates
@@ -38,7 +41,7 @@ export const isPositionWithinBoundary = ({
   position: Position;
   boundaryCircle: BoundaryCircle;
 }): boolean => {
-  const distance = getDistance(
+  const distance = transformService.getDistance(
     position,
     { x: boundaryCircle.centerX, y: boundaryCircle.centerY }
   );
@@ -61,7 +64,7 @@ export const findNonOverlappingPosition = ({
 
   // Check if current position overlaps
   const hasOverlap = existingCircles.some(circle => {
-    const distance = getDistance(
+    const distance = transformService.getDistance(
       targetPosition,
       { x: circle.centerX, y: circle.centerY }
     );
@@ -84,14 +87,16 @@ export const findNonOverlappingPosition = ({
       
       for (let distanceStep = 1; distanceStep <= DISTANCE_STEPS; distanceStep++) {
         const distance = minRequiredDistance * (1 + distanceStep * 0.1); // Add 10% increment each step
-        const candidatePosition = {
-          x: circle.centerX + Math.cos(angle) * distance,
-          y: circle.centerY + Math.sin(angle) * distance
-        };
+        const candidatePosition = transformService.polarToCartesian({
+          centerX: circle.centerX,
+          centerY: circle.centerY,
+          radius: distance,
+          angleInDegrees: (angle * 180) / Math.PI,
+        });
 
         // Check if this position overlaps with any circle
         const hasAnyOverlap = existingCircles.some(otherCircle => {
-          const distToOther = getDistance(
+          const distToOther = transformService.getDistance(
             candidatePosition,
             { x: otherCircle.centerX, y: otherCircle.centerY }
           );
@@ -99,7 +104,7 @@ export const findNonOverlappingPosition = ({
         });
 
         if (!hasAnyOverlap) {
-          const distanceToTarget = getDistance(candidatePosition, targetPosition);
+          const distanceToTarget = transformService.getDistance(candidatePosition, targetPosition);
           if (distanceToTarget < minDistance) {
             minDistance = distanceToTarget;
             bestPosition = candidatePosition;
@@ -129,7 +134,7 @@ export const calculateCircularLayout = ({
 
   nodeIds.forEach((id, index) => {
     const angle = (360 / totalNodes) * index;
-    const position = polarToCartesian({
+    const position = transformService.polarToCartesian({
       centerX: centerPosition.x,
       centerY: centerPosition.y,
       radius,

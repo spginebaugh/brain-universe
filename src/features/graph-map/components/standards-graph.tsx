@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
 import ReactFlow, {
   Background,
   Controls,
@@ -28,9 +28,27 @@ import {
   updateBoundaryNodePositions, 
   updateBoundaryCirclePositions 
 } from '../utils/boundary-manager';
+import { useCoordinateTransform } from '@/shared/hooks/use-coordinate-transform';
 
 // Constants for zoom thresholds
 const TEXT_VISIBILITY_THRESHOLD = 0.5;
+const TEXT_SCALE_CONSTRAINTS = {
+  min: 14, // Minimum font size in pixels
+  max: 24, // Maximum font size in pixels
+  base: 24, // Base font size (when zoom is 1)
+} as const;
+
+const BORDER_SCALE_CONSTRAINTS = {
+  min: 1, // Minimum stroke width in pixels
+  max: 3, // Maximum stroke width in pixels
+  base: 2, // Base stroke width (when zoom is 1)
+} as const;
+
+const DASH_SCALE_CONSTRAINTS = {
+  min: 3, // Minimum dash length in pixels
+  max: 8, // Maximum dash length in pixels
+  base: 5, // Base dash length (when zoom is 1)
+} as const;
 
 // Define node component outside to prevent recreation
 const CustomNode = ({ data }: NodeProps) => {
@@ -59,8 +77,9 @@ const flowStyles = {
 const StandardsGraphInner = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
-  const { screenToFlowPosition, getViewport } = useReactFlow();
+  const { getViewport } = useReactFlow();
   const viewport = useViewport();
+  const transformService = useCoordinateTransform();
   const { 
     visibleNodes, 
     placementMode,
@@ -74,6 +93,14 @@ const StandardsGraphInner = () => {
   const { data: standardsData, isLoading } = useStandardsData();
   const zoom = viewport.zoom || 1;
   const isRegionDragMode = isInRegionDragMode(zoom);
+
+  const transformContext = useMemo(() => ({
+    zoom,
+    viewport: {
+      x: viewport.x || 0,
+      y: viewport.y || 0,
+    },
+  }), [viewport.x, viewport.y, zoom]);
 
   // Update zoom level in store when viewport changes
   useEffect(() => {
@@ -150,11 +177,10 @@ const StandardsGraphInner = () => {
   const handlePaneClick = useCallback(
     (event: React.MouseEvent) => {
       if (placementMode.active && placementMode.nodeId && standardsData) {
-        // Convert screen coordinates to flow coordinates
-        const position = screenToFlowPosition({
-          x: event.clientX,
-          y: event.clientY,
-        });
+        const flowPosition = transformService.screenToFlow(
+          { x: event.clientX, y: event.clientY },
+          transformContext
+        );
 
         // Get child nodes
         const childNodes = getAllChildNodes(placementMode.nodeId, standardsData);
@@ -163,7 +189,7 @@ const StandardsGraphInner = () => {
         addRootNode(
           placementMode.nodeId, 
           childNodes, 
-          position,
+          flowPosition,
           standardsData.data.standards
         );
         
@@ -171,7 +197,7 @@ const StandardsGraphInner = () => {
         exitPlacementMode();
       }
     },
-    [placementMode, standardsData, addRootNode, exitPlacementMode, screenToFlowPosition]
+    [placementMode, standardsData, addRootNode, exitPlacementMode, transformService, transformContext]
   );
 
   if (isLoading) {
@@ -201,41 +227,62 @@ const StandardsGraphInner = () => {
         nodesDraggable={true}
       >
         <svg className="absolute top-0 left-0 w-full h-full pointer-events-none">
-          {Array.from(boundaryCircles.values()).map((circle) => (
-            <circle
-              key={circle.id}
-              cx={circle.centerX}
-              cy={circle.centerY}
-              r={circle.radius}
-              fill="rgba(226, 232, 240, 0.1)"
-              stroke="#94a3b8"
-              strokeWidth={2 / zoom}
-              strokeDasharray={`${5 / zoom},${5 / zoom}`}
-              className={`${isRegionDragMode ? 'cursor-move' : ''} pointer-events-${isRegionDragMode ? 'auto' : 'none'}`}
-              style={{
-                transform: `translate(${viewport.x || 0}px, ${viewport.y || 0}px) scale(${zoom})`,
-                transformOrigin: '0 0',
-              }}
-            />
-          ))}
+          {Array.from(boundaryCircles.values()).map((circle) => {
+            const transformedPosition = transformService.applyViewportTransform(
+              { x: circle.centerX, y: circle.centerY },
+              transformContext
+            );
+
+            const strokeWidth = transformService.getInverseScaleWithConstraints(
+              zoom,
+              BORDER_SCALE_CONSTRAINTS
+            );
+
+            const dashLength = transformService.getInverseScaleWithConstraints(
+              zoom,
+              DASH_SCALE_CONSTRAINTS
+            );
+
+            return (
+              <circle
+                key={circle.id}
+                cx={transformedPosition.x}
+                cy={transformedPosition.y}
+                r={circle.radius * zoom}
+                fill="rgba(226, 232, 240, 0.1)"
+                stroke="#94a3b8"
+                strokeWidth={strokeWidth}
+                strokeDasharray={`${dashLength},${dashLength}`}
+                className={`${isRegionDragMode ? 'cursor-move' : ''} pointer-events-${isRegionDragMode ? 'auto' : 'none'}`}
+              />
+            );
+          })}
         </svg>
         <svg className="absolute top-0 left-0 w-full h-full pointer-events-none" style={{ zIndex: 5 }}>
           {Array.from(boundaryCircles.values()).map((circle) => {
             const showText = isRegionDragMode;
-            return showText && (
+            if (!showText) return null;
+
+            const transformedPosition = transformService.applyViewportTransform(
+              { x: circle.centerX, y: circle.centerY },
+              transformContext
+            );
+
+            const fontSize = transformService.getInverseScaleWithConstraints(
+              zoom,
+              TEXT_SCALE_CONSTRAINTS
+            );
+
+            return (
               <text
                 key={`text-${circle.id}`}
-                x={circle.centerX}
-                y={circle.centerY}
+                x={transformedPosition.x}
+                y={transformedPosition.y}
                 textAnchor="middle"
                 dominantBaseline="middle"
                 fill="#475569"
-                fontSize={`${24 / zoom}px`}
+                fontSize={`${fontSize}px`}
                 className="pointer-events-none select-none"
-                style={{
-                  transform: `translate(${viewport.x || 0}px, ${viewport.y || 0}px) scale(${zoom})`,
-                  transformOrigin: '0 0',
-                }}
               >
                 {standardsData?.data.standards[circle.id]?.description || ''}
               </text>
