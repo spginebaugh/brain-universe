@@ -1,15 +1,15 @@
-import { createCoordinateTransform } from '@/shared/services/coordinate-transform';
+import { createGeometryService } from '@/shared/services/geometry';
 import { createPositionManager } from '@/shared/services/position-manager';
 
 // Create singleton instances
-const transformService = createCoordinateTransform();
+const geometryService = createGeometryService();
 const positionManager = createPositionManager();
 
 // Export the utility functions
 export const {
   polarToCartesian,
   getDistance,
-} = transformService;
+} = geometryService;
 
 export const {
   findNonOverlappingPosition,

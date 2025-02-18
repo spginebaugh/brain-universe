@@ -1,6 +1,5 @@
 import { Position, BoundaryCircle } from '@/features/graph-map/types/graph';
-import { createCoordinateTransform } from './coordinate-transform';
-import { createPositionManager } from './position-manager';
+import { createGeometryService } from './geometry';
 import { StandardsData } from '@/features/graph-map/types/standard';
 
 export interface BoundaryParams {
@@ -23,8 +22,7 @@ export interface BoundaryVisibilityParams {
 }
 
 export const createBoundaryManager = () => {
-  const transformService = createCoordinateTransform();
-  const positionManager = createPositionManager();
+  const geometryService = createGeometryService();
 
   const calculateBoundaryRadius = (
     nodeIds: string[],
@@ -58,11 +56,11 @@ export const createBoundaryManager = () => {
     existingBoundaries,
   }: BoundaryParams): BoundaryCircle => {
     const radius = calculateBoundaryRadius([nodeId, ...childNodeIds], standards);
-    const adjustedPosition = positionManager.findNonOverlappingPosition({
-      targetPosition: position,
-      targetRadius: radius,
-      existingCircles: Array.from(existingBoundaries.values()),
-    });
+    const adjustedPosition = geometryService.findNonOverlappingPosition(
+      position,
+      radius,
+      Array.from(existingBoundaries.values())
+    );
 
     return {
       id: nodeId,
@@ -90,10 +88,10 @@ export const createBoundaryManager = () => {
     position: Position,
     boundary: BoundaryCircle
   ): boolean => {
-    return transformService.getDistance(
+    return geometryService.isPointInCircle(
       position,
-      { x: boundary.centerX, y: boundary.centerY }
-    ) <= boundary.radius;
+      boundary
+    );
   };
 
   const updateBoundaryPosition = (
@@ -111,21 +109,8 @@ export const createBoundaryManager = () => {
   const mergeBoundaries = (
     boundaries: BoundaryCircle[]
   ): BoundaryCircle => {
-    // Calculate the encompassing circle for multiple boundaries
-    const positions = boundaries.map(b => ({ x: b.centerX, y: b.centerY }));
-    const radii = boundaries.map(b => b.radius);
+    const mergedCircle = geometryService.calculateEnclosingCircle(boundaries);
     
-    // Find the center point that minimizes the distance to all boundaries
-    const centerX = positions.reduce((sum, pos) => sum + pos.x, 0) / positions.length;
-    const centerY = positions.reduce((sum, pos) => sum + pos.y, 0) / positions.length;
-    
-    // Calculate the radius that encompasses all boundaries
-    const radius = Math.max(
-      ...boundaries.map((b, i) => 
-        transformService.getDistance({ x: centerX, y: centerY }, positions[i]) + radii[i]
-      )
-    );
-
     // Combine all nodeIds
     const nodeIds = Array.from(new Set(
       boundaries.flatMap(b => b.nodeIds)
@@ -133,9 +118,7 @@ export const createBoundaryManager = () => {
 
     return {
       id: `merged-${boundaries[0].id}`,
-      centerX,
-      centerY,
-      radius,
+      ...mergedCircle,
       nodeIds,
     };
   };
@@ -145,26 +128,19 @@ export const createBoundaryManager = () => {
     nodeGroups: string[][]
   ): BoundaryCircle[] => {
     return nodeGroups.map(group => {
-      const groupPositions = group.map(id => {
-        const index = boundary.nodeIds.indexOf(id);
-        const angle = (2 * Math.PI * index) / boundary.nodeIds.length;
-        return transformService.polarToCartesian({
-          centerX: boundary.centerX,
-          centerY: boundary.centerY,
-          radius: boundary.radius * 0.5, // Place new boundaries closer to center
-          angleInDegrees: (angle * 180) / Math.PI,
-        });
-      });
+      const positions = geometryService.calculateCircularPositions(
+        { x: boundary.centerX, y: boundary.centerY },
+        boundary.radius * 0.5,
+        group.length
+      );
 
-      // Calculate center and radius for the new boundary
-      const centerX = groupPositions.reduce((sum, pos) => sum + pos.x, 0) / group.length;
-      const centerY = groupPositions.reduce((sum, pos) => sum + pos.y, 0) / group.length;
-      const radius = boundary.radius / Math.sqrt(nodeGroups.length); // Scale radius based on split count
+      const center = geometryService.findCircleCenter(positions);
+      const radius = boundary.radius / Math.sqrt(nodeGroups.length);
 
       return {
         id: `split-${boundary.id}-${group[0]}`,
-        centerX,
-        centerY,
+        centerX: center.x,
+        centerY: center.y,
         radius,
         nodeIds: group,
       };
