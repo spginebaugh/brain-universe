@@ -50,7 +50,7 @@ Backend and Database
 The project directory structure is as below:
 ```
 .
-├── cloud_functions
+├── functions # Firebase Cloud Functions
 │   └── src
 ├── commonstandards
 │   └── ...
