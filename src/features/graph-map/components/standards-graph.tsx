@@ -23,14 +23,12 @@ import { transformToGraphData } from '../services/standards-service';
 import { useGraphStore } from '@/shared/stores/graph-store';
 import { useStandardsData } from '@/shared/hooks/use-standards-data';
 import { getAllChildNodes } from '../utils/graph-utils';
-import { 
-  isInRegionDragMode, 
-  updateBoundaryNodePositions, 
-  updateBoundaryCirclePositions 
-} from '../utils/boundary-manager';
 import { useCoordinateTransform } from '@/shared/hooks/use-coordinate-transform';
+import { usePositionManager } from '@/shared/hooks/use-position-manager';
+import { useBoundaryManager } from '@/shared/hooks/use-boundary-manager';
 
 // Constants for zoom thresholds
+const REGION_DRAG_THRESHOLD = 0.3;
 const TEXT_VISIBILITY_THRESHOLD = 0.5;
 const TEXT_SCALE_CONSTRAINTS = {
   min: 14, // Minimum font size in pixels
@@ -80,6 +78,8 @@ const StandardsGraphInner = () => {
   const { getViewport } = useReactFlow();
   const viewport = useViewport();
   const transformService = useCoordinateTransform();
+  const positionManager = usePositionManager();
+  const boundaryManager = useBoundaryManager();
   const { 
     visibleNodes, 
     placementMode,
@@ -87,12 +87,14 @@ const StandardsGraphInner = () => {
     exitPlacementMode,
     nodePositions,
     boundaryCircles,
-    isNodeWithinBoundary,
     setZoomLevel
   } = useGraphStore();
   const { data: standardsData, isLoading } = useStandardsData();
   const zoom = viewport.zoom || 1;
-  const isRegionDragMode = isInRegionDragMode(zoom);
+  const isRegionDragMode = boundaryManager.isInRegionDragMode({ 
+    zoom, 
+    threshold: REGION_DRAG_THRESHOLD 
+  });
 
   const transformContext = useMemo(() => ({
     zoom,
@@ -114,45 +116,68 @@ const StandardsGraphInner = () => {
       changes.forEach(change => {
         if (change.type === 'position' && change.position && change.id) {
           if (isRegionDragMode) {
-            // Update node positions within the region
-            const updatedPositions = updateBoundaryNodePositions({
-              nodeId: change.id,
-              position: change.position,
-              boundaryCircles,
-              nodePositions,
-            });
-
-            // Update boundary circle positions
             const oldPosition = nodePositions.get(change.id);
             if (oldPosition) {
-              const updatedBoundaries = updateBoundaryCirclePositions({
+              // Update node positions within the region
+              const updatedPositions = positionManager.updateRegionPositions({
                 nodeId: change.id,
+                position: change.position,
                 oldPosition,
-                newPosition: change.position,
                 boundaryCircles,
                 nodePositions,
               });
 
-              // Update all nodes with their new positions
-              setNodes(nodes.map(node => ({
-                ...node,
-                position: updatedPositions.get(node.id) || node.position
-              })));
+              // Find the containing boundary
+              const containingBoundary = boundaryManager.findContainingBoundary(
+                change.id,
+                boundaryCircles
+              );
 
-              // Update the store with new positions
-              Array.from(updatedPositions.entries()).forEach(([id, pos]) => {
-                nodePositions.set(id, pos);
-              });
+              if (containingBoundary) {
+                // Calculate the movement delta
+                const deltaX = change.position.x - oldPosition.x;
+                const deltaY = change.position.y - oldPosition.y;
 
-              // Update the store with new boundary positions
-              Array.from(updatedBoundaries.entries()).forEach(([id, boundary]) => {
-                boundaryCircles.set(id, boundary);
-              });
+                // Update the boundary position
+                const updatedBoundary = boundaryManager.updateBoundaryPosition(
+                  containingBoundary,
+                  deltaX,
+                  deltaY
+                );
+
+                // Update all nodes with their new positions
+                setNodes(nodes.map(node => ({
+                  ...node,
+                  position: updatedPositions.get(node.id) || node.position
+                })));
+
+                // Update the store with new positions
+                Array.from(updatedPositions.entries()).forEach(([id, pos]) => {
+                  nodePositions.set(id, pos);
+                });
+
+                // Update the store with new boundary position
+                boundaryCircles.set(containingBoundary.id, updatedBoundary);
+              }
             }
           } else {
             // In normal mode, handle individual node changes with boundary constraints
-            if (!isNodeWithinBoundary(change.id, change.position)) {
-              change.position = nodePositions.get(change.id);
+            const containingBoundary = boundaryManager.findContainingBoundary(
+              change.id,
+              boundaryCircles
+            );
+
+            if (containingBoundary) {
+              const isWithinBoundary = boundaryManager.isPositionWithinBoundary(
+                change.position,
+                containingBoundary
+              );
+
+              if (!isWithinBoundary) {
+                change.position = nodePositions.get(change.id);
+              } else {
+                nodePositions.set(change.id, change.position);
+              }
             } else {
               nodePositions.set(change.id, change.position);
             }
@@ -162,7 +187,7 @@ const StandardsGraphInner = () => {
       
       onNodesChange(changes);
     },
-    [isRegionDragMode, boundaryCircles, nodePositions, nodes, setNodes, isNodeWithinBoundary, onNodesChange]
+    [isRegionDragMode, boundaryCircles, nodePositions, nodes, setNodes, positionManager, boundaryManager, onNodesChange]
   );
 
   // Update graph when visibleNodes or standardsData changes

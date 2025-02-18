@@ -1,7 +1,9 @@
 import { StateCreator } from 'zustand';
 import { Position } from '@/features/graph-map/types/graph';
 import { LayoutState, LayoutActions, GraphStore } from './types';
-import { isPositionWithinBoundary } from '@/features/graph-map/utils/graph-math';
+import { createBoundaryManager } from '@/shared/services/boundary-manager';
+
+const boundaryManager = createBoundaryManager();
 
 export const createLayoutSlice: StateCreator<
   GraphStore,
@@ -14,15 +16,16 @@ export const createLayoutSlice: StateCreator<
   
   isNodeWithinBoundary: (nodeId: string, newPosition: Position) => {
     const state = get();
-    const boundaryCircle = Array.from(state.boundaryCircles.values()).find(
-      circle => circle.nodeIds.includes(nodeId)
+    const containingBoundary = boundaryManager.findContainingBoundary(
+      nodeId,
+      state.boundaryCircles
     );
     
-    if (!boundaryCircle) return true;
+    if (!containingBoundary) return true;
     
-    return isPositionWithinBoundary({
-      position: newPosition,
-      boundaryCircle
-    });
+    return boundaryManager.isPositionWithinBoundary(
+      newPosition,
+      containingBoundary
+    );
   },
 }); 

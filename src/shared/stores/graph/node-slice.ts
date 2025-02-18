@@ -5,6 +5,7 @@ import {
   findNonOverlappingPosition, 
   calculateCircularLayout 
 } from '@/features/graph-map/utils/graph-math';
+import { Position } from '@/features/graph-map/types/graph';
 
 const groupNodesByDepth = (
   nodeIds: string[],
@@ -72,7 +73,7 @@ export const createNodeSlice: StateCreator<
         });
         
         // Merge the new positions into the map
-        circularPositions.forEach((pos, id) => {
+        circularPositions.forEach((pos: Position, id: string) => {
           newNodePositions.set(id, pos);
         });
       });

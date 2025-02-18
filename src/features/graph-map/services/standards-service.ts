@@ -1,4 +1,5 @@
 import { StandardsData, Standard } from '../types/standard';
+import { Position } from '../types/graph';
 
 interface GraphNode {
   id: string;
@@ -6,7 +7,7 @@ interface GraphNode {
     label: string;
     depth: number;
   };
-  position: { x: number; y: number };
+  position: Position;
 }
 
 interface GraphEdge {
@@ -28,7 +29,7 @@ export const fetchStandardsData = async (): Promise<StandardsData> => {
 export const transformToGraphData = (
   standardsData: StandardsData,
   visibleNodes: Set<string>,
-  nodePositions: Map<string, { x: number; y: number }>
+  nodePositions: Map<string, Position>
 ): GraphData => {
   const standards = standardsData.data.standards;
   const nodes: GraphNode[] = [];
