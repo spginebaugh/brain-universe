@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { initializeFirebaseServices } from '@/shared/services/firebase/config';
-import { authService } from '@/features/auth';
+import { useAuthStore } from '@/features/auth/stores/auth-store';
 import { DndProvider } from 'react-dnd';
 import { HTML5Backend } from 'react-dnd-html5-backend';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -14,14 +14,16 @@ interface ProvidersProps {
 }
 
 export function Providers({ children }: ProvidersProps) {
+  const initializeAuthListener = useAuthStore(state => state.initializeAuthListener);
+
   useEffect(() => {
     // Initialize Firebase services on the client side
     initializeFirebaseServices();
     
-    // Initialize auth listener
-    const unsubscribe = authService.initializeAuthListener();
+    // Initialize auth listener from the store
+    const unsubscribe = initializeAuthListener();
     return () => unsubscribe();
-  }, []);
+  }, [initializeAuthListener]);
 
   return (
     <QueryClientProvider client={queryClient}>

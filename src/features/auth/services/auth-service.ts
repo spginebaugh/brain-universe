@@ -7,68 +7,94 @@ import {
   sendPasswordResetEmail,
   onAuthStateChanged,
   User,
+  UserCredential,
+  updateProfile,
 } from 'firebase/auth';
 import { auth } from '@/shared/services/firebase/config';
-import { useAuthStore } from '../stores/auth-store';
-import { AUTH_STATUS } from '../types/errors';
+import { mapFirebaseError } from '../utils/error-mapper';
 
 const googleProvider = new GoogleAuthProvider();
 
-interface AuthCredentials {
+export interface AuthCredentials {
   email: string;
   password: string;
 }
 
+export interface SignUpCredentials extends AuthCredentials {
+  displayName?: string;
+}
+
+// Re-export types for convenience
+export type { AuthCredentials as SignInCredentials };
+
 export const authService = {
-  initializeAuthListener: () => {
-    const { setUser, setStatus } = useAuthStore.getState();
-
-    return onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      setStatus(AUTH_STATUS.IDLE);
-    });
+  /**
+   * Initialize auth state listener
+   * @param onAuthStateChange Callback function to handle auth state changes
+   * @returns Unsubscribe function
+   */
+  initializeAuthListener: (onAuthStateChange: (user: User | null) => void) => {
+    return onAuthStateChanged(auth, onAuthStateChange);
   },
 
-  signUp: async ({ email, password }: AuthCredentials): Promise<User> => {
+  /**
+   * Sign up with email and password
+   */
+  signUp: async ({ email, password, displayName }: SignUpCredentials): Promise<UserCredential> => {
     try {
-      const { user } = await createUserWithEmailAndPassword(auth, email, password);
-      return user;
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      
+      if (displayName) {
+        await updateProfile(result.user, { displayName });
+      }
+      
+      return result;
     } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to sign up');
+      throw mapFirebaseError(error);
     }
   },
 
-  signIn: async ({ email, password }: AuthCredentials): Promise<User> => {
+  /**
+   * Sign in with email and password
+   */
+  signIn: async ({ email, password }: AuthCredentials): Promise<UserCredential> => {
     try {
-      const { user } = await signInWithEmailAndPassword(auth, email, password);
-      return user;
+      return await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to sign in');
+      throw mapFirebaseError(error);
     }
   },
 
-  signInWithGoogle: async (): Promise<User> => {
+  /**
+   * Sign in with Google
+   */
+  signInWithGoogle: async (): Promise<UserCredential> => {
     try {
-      const { user } = await signInWithPopup(auth, googleProvider);
-      return user;
+      return await signInWithPopup(auth, googleProvider);
     } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to sign in with Google');
+      throw mapFirebaseError(error);
     }
   },
 
+  /**
+   * Sign out the current user
+   */
   signOut: async (): Promise<void> => {
     try {
       await firebaseSignOut(auth);
     } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to sign out');
+      throw mapFirebaseError(error);
     }
   },
 
+  /**
+   * Reset password for email
+   */
   resetPassword: async (email: string): Promise<void> => {
     try {
       await sendPasswordResetEmail(auth, email);
     } catch (error) {
-      throw new Error(error instanceof Error ? error.message : 'Failed to reset password');
+      throw mapFirebaseError(error);
     }
   },
 }; 

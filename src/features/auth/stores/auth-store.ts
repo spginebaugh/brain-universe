@@ -1,20 +1,9 @@
 'use client';
 
 import { create } from 'zustand';
-import { User, UserCredential, signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendPasswordResetEmail } from 'firebase/auth';
-import { auth } from '@/shared/services/firebase/config';
-import { mapFirebaseError } from '../utils/error-mapper';
+import { User, UserCredential } from 'firebase/auth';
 import { AuthError, AuthStatus, AUTH_STATUS } from '../types/errors';
-
-// Auth request types
-export interface SignInCredentials {
-  email: string;
-  password: string;
-}
-
-export interface SignUpCredentials extends SignInCredentials {
-  displayName?: string;
-}
+import { authService, SignInCredentials, SignUpCredentials } from '../services/auth-service';
 
 interface AuthState {
   // State
@@ -32,6 +21,7 @@ interface AuthState {
   
   // Auth actions
   signIn: (credentials: SignInCredentials) => Promise<UserCredential>;
+  signInWithGoogle: () => Promise<UserCredential>;
   signUp: (credentials: SignUpCredentials) => Promise<UserCredential>;
   signOut: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
@@ -39,6 +29,9 @@ interface AuthState {
   // Utility actions
   clearError: () => void;
   reset: () => void;
+
+  // Auth listener
+  initializeAuthListener: () => () => void;
 }
 
 export const useAuthStore = create<AuthState>()((set) => ({
@@ -70,11 +63,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   signIn: async (credentials) => {
     try {
       set({ status: AUTH_STATUS.LOADING });
-      const result = await signInWithEmailAndPassword(
-        auth,
-        credentials.email,
-        credentials.password
-      );
+      const result = await authService.signIn(credentials);
       set({ 
         user: result.user,
         isAuthenticated: true,
@@ -83,9 +72,28 @@ export const useAuthStore = create<AuthState>()((set) => ({
       });
       return result;
     } catch (error) {
-      const mappedError = mapFirebaseError(error);
       set({ 
-        error: mappedError,
+        error: error as AuthError,
+        status: AUTH_STATUS.ERROR 
+      });
+      throw error;
+    }
+  },
+
+  signInWithGoogle: async () => {
+    try {
+      set({ status: AUTH_STATUS.LOADING });
+      const result = await authService.signInWithGoogle();
+      set({ 
+        user: result.user,
+        isAuthenticated: true,
+        status: AUTH_STATUS.SUCCESS,
+        error: null
+      });
+      return result;
+    } catch (error) {
+      set({ 
+        error: error as AuthError,
         status: AUTH_STATUS.ERROR 
       });
       throw error;
@@ -95,18 +103,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   signUp: async (credentials) => {
     try {
       set({ status: AUTH_STATUS.LOADING });
-      const result = await createUserWithEmailAndPassword(
-        auth,
-        credentials.email,
-        credentials.password
-      );
-
-      if (credentials.displayName) {
-        await updateProfile(result.user, {
-          displayName: credentials.displayName
-        });
-      }
-
+      const result = await authService.signUp(credentials);
       set({ 
         user: result.user,
         isAuthenticated: true,
@@ -115,9 +112,8 @@ export const useAuthStore = create<AuthState>()((set) => ({
       });
       return result;
     } catch (error) {
-      const mappedError = mapFirebaseError(error);
       set({ 
-        error: mappedError,
+        error: error as AuthError,
         status: AUTH_STATUS.ERROR 
       });
       throw error;
@@ -127,7 +123,7 @@ export const useAuthStore = create<AuthState>()((set) => ({
   signOut: async () => {
     try {
       set({ status: AUTH_STATUS.LOADING });
-      await auth.signOut();
+      await authService.signOut();
       set({ 
         user: null,
         isAuthenticated: false,
@@ -135,9 +131,8 @@ export const useAuthStore = create<AuthState>()((set) => ({
         status: AUTH_STATUS.SUCCESS 
       });
     } catch (error) {
-      const mappedError = mapFirebaseError(error);
       set({ 
-        error: mappedError,
+        error: error as AuthError,
         status: AUTH_STATUS.ERROR 
       });
       throw error;
@@ -147,15 +142,14 @@ export const useAuthStore = create<AuthState>()((set) => ({
   resetPassword: async (email) => {
     try {
       set({ status: AUTH_STATUS.LOADING });
-      await sendPasswordResetEmail(auth, email);
+      await authService.resetPassword(email);
       set({ 
         status: AUTH_STATUS.SUCCESS,
         error: null
       });
     } catch (error) {
-      const mappedError = mapFirebaseError(error);
       set({ 
-        error: mappedError,
+        error: error as AuthError,
         status: AUTH_STATUS.ERROR 
       });
       throw error;
@@ -172,11 +166,24 @@ export const useAuthStore = create<AuthState>()((set) => ({
     isAuthenticated: false,
     isInitialized: false
   }),
+
+  // Auth listener initialization
+  initializeAuthListener: () => {
+    return authService.initializeAuthListener((user) => {
+      set({ 
+        user,
+        isAuthenticated: !!user,
+        status: AUTH_STATUS.SUCCESS,
+        isInitialized: true,
+        error: null 
+      });
+    });
+  },
 }));
 
 // Selector hooks for common auth states
-export const useIsAuthenticated = () => useAuthStore((state: AuthState) => state.isAuthenticated);
-export const useAuthUser = () => useAuthStore((state: AuthState) => state.user);
-export const useAuthStatus = () => useAuthStore((state: AuthState) => state.status);
-export const useAuthError = () => useAuthStore((state: AuthState) => state.error);
-export const useIsAuthLoading = () => useAuthStore((state: AuthState) => state.status === AUTH_STATUS.LOADING); 
+export const useIsAuthenticated = () => useAuthStore((state) => state.isAuthenticated);
+export const useAuthUser = () => useAuthStore((state) => state.user);
+export const useAuthStatus = () => useAuthStore((state) => state.status);
+export const useAuthError = () => useAuthStore((state) => state.error);
+export const useIsAuthLoading = () => useAuthStore((state) => state.status === AUTH_STATUS.LOADING); 
