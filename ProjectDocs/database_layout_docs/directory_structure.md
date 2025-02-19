@@ -14,7 +14,7 @@ users
                     └─ {edgeId_K} (doc)
 
 templates
-    └─ {template_source_name} (subcollection) // Template source, e.g. Texas TEKS
+    └─ {template_source_name} (subcollection) // Template source, e.g. texas_TEKS
         └─ {subject} (subcollection) // e.g. Math
                 └─ {graphId} (doc) // Graph profile
                     ├─ nodes (subcollection)

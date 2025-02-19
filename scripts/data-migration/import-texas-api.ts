@@ -86,7 +86,7 @@ async function importTexasStandards() {
         'utf-8'
       );
 
-      console.log(`Written graph ${i + 1}/${firebaseData.graphs.length}: ${graph.properties.name}`);
+      console.log(`Written graph ${i + 1}/${firebaseData.graphs.length}: ${graph.graphName}`);
     }
 
     console.log('\nImport Summary:');

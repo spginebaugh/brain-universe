@@ -18,15 +18,15 @@ function createGraphForStandard(
     graphId: uuidv4(),
     rootNodeId: rootStandard.id,
     subjectName: subjectName,
+    graphName: `${rootStandard.nodeTitle}`,
     properties: {
-      name: `${rootStandard.nodeTitle}`,
-      description: rootStandard.nodeDescription || 'Educational standards subgraph',
+      description: rootStandard.nodeDescription || '',
       type: 'curriculum',
       status: 'active'
     },
     metadata: {
       fromTemplate: true,
-      templateId: `${source.toLowerCase()}_${subjectName.toLowerCase()}`,
+      templateId: `${source}-${subjectName}-${rootStandard.nodeTitle}`,
       tags: [source, subjectName, 'standards', `depth_${rootStandard.metadata.depth}`]
     },
     progress: {

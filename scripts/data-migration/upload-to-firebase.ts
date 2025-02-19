@@ -96,7 +96,7 @@ async function uploadAllTemplates(): Promise<void> {
         continue;
       }
 
-      const [source, subject] = templateId.split('_');
+      const [source, subject] = templateId.split('-');
       if (!source || !subject) {
         console.warn(`Skipping graph ${graph.graphId}: Invalid template ID format`);
         continue;

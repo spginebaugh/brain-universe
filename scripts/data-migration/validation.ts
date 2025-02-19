@@ -5,7 +5,7 @@ export const StandardSchema = z.object({
   nodeTitle: z.string(),
   nodeDescription: z.string(),
   metadata: z.object({
-    source: z.enum(['common_core', 'Texas TEKS']),
+    source: z.enum(['common_core', 'texas_TEKS']),
     subjectName: z.string(),
     standardNotation: z.string(),
     depth: z.number()

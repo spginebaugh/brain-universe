@@ -32,7 +32,7 @@ export function processTexasApiStandards(
         nodeTitle: processed.title,
         nodeDescription: processed.description,
         metadata: {
-          source: 'Texas TEKS' as const,
+          source: 'texas_TEKS' as const,
           subjectName: 'Math',
           standardNotation: standard.statementNotation || '',
           depth: standard.depth
@@ -48,7 +48,7 @@ export function processTexasApiStandards(
       nodeTitle: standard.description,
       nodeDescription: '',
       metadata: {
-        source: 'Texas TEKS' as const,
+        source: 'texas_TEKS' as const,
         subjectName: 'Math',
         standardNotation: standard.statementNotation || '',
         depth: standard.depth

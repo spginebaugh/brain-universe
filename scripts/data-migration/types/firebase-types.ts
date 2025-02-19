@@ -6,7 +6,6 @@ export type GraphStatus = 'active' | 'archived' | 'completed';
 export type GraphLayout = 'tree' | 'force' | 'hierarchical' | 'user_defined';
 
 export interface GraphProperties {
-  name: string;
   description: string;
   type: GraphType;
   status: GraphStatus;
@@ -50,6 +49,7 @@ export interface Graph {
   graphId: string;
   rootNodeId: string;
   subjectName: string;
+  graphName: string;
   properties: GraphProperties;
   metadata: GraphMetadata;
   progress: GraphProgress;
