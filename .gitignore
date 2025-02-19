@@ -40,6 +40,10 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Firebase credentials
+scripts/data-migration/serviceAccountKey.json
+
 /commonstandards/
 /public/commonstandards/
 /scripts/data-migration/processed_JSON/
+/scripts/data-migration/node_modules/
