@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useCallback, useMemo } from 'react';
-import ReactFlow, {
+import {
+  ReactFlow,
   Background,
   Controls,
   MiniMap,
@@ -9,15 +10,15 @@ import ReactFlow, {
   useEdgesState,
   Node,
   Edge,
-  NodeProps,
   Handle,
   Position,
   useReactFlow,
   ReactFlowProvider,
   OnNodesChange,
   useViewport,
-} from 'reactflow';
-import 'reactflow/dist/style.css';
+  NodeTypes
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 
 import { transformToGraphData } from '../services/standards-service';
 import { useGraphStore } from '@/shared/stores/graph-store';
@@ -26,6 +27,37 @@ import { getAllChildNodes } from '../utils/graph-utils';
 import { useCoordinateTransform } from '@/shared/hooks/use-coordinate-transform';
 import { usePositionManager } from '@/shared/hooks/use-position-manager';
 import { useBoundaryManager } from '@/shared/hooks/use-boundary-manager';
+
+interface NodeData extends Record<string, unknown> {
+  title?: string;
+  label?: string;
+}
+
+type CustomNode = Node<NodeData>;
+type CustomEdge = Edge;
+
+interface CustomNodeProps {
+  data: NodeData;
+  id: string;
+  type?: string;
+}
+
+const CustomNodeComponent = ({ data }: CustomNodeProps) => {
+  const viewport = useViewport();
+  const showText = viewport.zoom >= TEXT_VISIBILITY_THRESHOLD;
+
+  return (
+    <div className={`bg-white border-2 border-gray-200 rounded-lg p-4 shadow-lg max-w-md transition-opacity duration-200 ${showText ? 'opacity-100' : 'opacity-0'}`}>
+      <Handle type="target" position={Position.Top} style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
+      <p className="text-sm text-gray-800">{data.title || data.label}</p>
+      <Handle type="source" position={Position.Bottom} style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
+    </div>
+  );
+};
+
+const nodeTypes = {
+  default: CustomNodeComponent,
+} satisfies NodeTypes;
 
 // Constants for zoom thresholds
 const REGION_DRAG_THRESHOLD = 0.3;
@@ -48,33 +80,14 @@ const DASH_SCALE_CONSTRAINTS = {
   base: 5, // Base dash length (when zoom is 1)
 } as const;
 
-// Define node component outside to prevent recreation
-const CustomNode = ({ data }: NodeProps) => {
-  const viewport = useViewport();
-  const showText = viewport.zoom >= TEXT_VISIBILITY_THRESHOLD;
-
-  return (
-    <div className={`bg-white border-2 border-gray-200 rounded-lg p-4 shadow-lg max-w-md transition-opacity duration-200 ${showText ? 'opacity-100' : 'opacity-0'}`}>
-      <Handle type="target" position={Position.Top} style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
-      <p className="text-sm text-gray-800">{data.label}</p>
-      <Handle type="source" position={Position.Bottom} style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }} />
-    </div>
-  );
-};
-
-// Define nodeTypes at module level
-const nodeTypes = {
-  default: CustomNode,
-} as const;
-
 const flowStyles = {
   width: '100%',
   height: '100vh',
 } as const;
 
 const StandardsGraphInner = () => {
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<CustomNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<CustomEdge>([]);
   const { getViewport } = useReactFlow();
   const viewport = useViewport();
   const transformService = useCoordinateTransform();
@@ -193,14 +206,16 @@ const StandardsGraphInner = () => {
   // Update graph when visibleNodes or standardsData changes
   useEffect(() => {
     if (standardsData && visibleNodes.size > 0) {
-      const graphData = transformToGraphData(standardsData, visibleNodes, nodePositions);
-      setNodes(graphData.nodes as Node[]);
-      setEdges(graphData.edges as Edge[]);
+      transformToGraphData(standardsData, visibleNodes, nodePositions)
+        .then(graphData => {
+          setNodes(graphData.nodes as Node[]);
+          setEdges(graphData.edges as Edge[]);
+        });
     }
   }, [standardsData, visibleNodes, setNodes, setEdges, nodePositions]);
 
   const handlePaneClick = useCallback(
-    (event: React.MouseEvent) => {
+    async (event: React.MouseEvent) => {
       if (placementMode.active && placementMode.nodeId && standardsData) {
         const flowPosition = transformService.screenToFlow(
           { x: event.clientX, y: event.clientY },
@@ -208,7 +223,7 @@ const StandardsGraphInner = () => {
         );
 
         // Get child nodes
-        const childNodes = getAllChildNodes(placementMode.nodeId, standardsData);
+        const childNodes = await getAllChildNodes(placementMode.nodeId, standardsData);
         
         // Add the node at the clicked position
         addRootNode(

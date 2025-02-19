@@ -10,6 +10,7 @@ General Rules
   - Global types should be stored in `src/shared/types/`. Be sure to check these files for any type definitions.
   - When in doubt or if unclear, ask the user for clarification.
   - If a prompt ends with "Discuss.", engage in a discussion rather than writing code.
+  - use @xyflow/react for graph visualization.
 
 Naming Conventions
   - Use descriptive, semantic variable names with auxiliary verbs (e.g., `isLoading`, `hasError`).

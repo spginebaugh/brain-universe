@@ -4,8 +4,8 @@
   graphId: string,
   rootNodeId: string,
   subjectName: string,
+  graphName: string,
   properties: {
-    name: string,
     description: string,
     type: "curriculum" | "quiz_set" | "learning_exploration" | "idea_map" | string,
     status: "active" | "archived" | "completed"
