@@ -1,6 +1,7 @@
 import './globals.css';
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
+import { Toaster } from 'sonner';
 
 import { SideBar } from '@/features/side-bar/components/side-bar';
 import { ShopPanel } from '@/features/shop-panel/components/shop-panel';
@@ -31,6 +32,7 @@ export default function RootLayout({
                 {children}
               </main>
             </div>
+            <Toaster position="top-right" />
           </Providers>
         </AuthProvider>
       </body>

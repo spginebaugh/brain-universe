@@ -8,10 +8,11 @@ import { Node } from '@/shared/types/node';
 import { Edge } from '@/shared/types/edge';
 import { GraphService } from './graph-service';
 
-interface CopyTemplateOptions {
+export interface CopyTemplateOptions {
   templateId: string;
   userId: string;
   newGraphId: string;
+  graphPosition?: { x: number; y: number };
 }
 
 export class TemplateService extends FirestoreService<TemplateGraph> {
@@ -87,40 +88,57 @@ export class TemplateService extends FirestoreService<TemplateGraph> {
     templateId,
     userId,
     newGraphId,
+    graphPosition = { x: 0, y: 0 },
   }: CopyTemplateOptions): Promise<void> {
+    console.log('Starting template copy process...', { templateId, userId, newGraphId });
+    
     const template = await this.getTemplate(templateId);
     if (!template) {
       throw new Error('Template not found');
     }
+    console.log('Found template:', template);
 
     const graphService = new GraphService(userId);
     
-    // The actual data stored in Firestore is identical between template and database
-    // Only the TypeScript types are different for code organization
-    // So we can safely cast the raw data to the base type, then to the target type
     const baseGraph: Graph = template as unknown as Graph;
     const newGraph: DbGraph = {
       ...baseGraph,
-      graphId: newGraphId
+      graphId: newGraphId,
+      graphPosition,
     } as DbGraph;
 
+    console.log('Creating new graph:', newGraph);
     await graphService.createGraph(newGraph);
 
-    // Copy nodes (same principle - the stored data is identical)
+    // Copy nodes
+    console.log('Copying nodes...');
     const nodesSnapshot = await getDocs(this.getNodesCollection(templateId));
-    for (const nodeDoc of nodesSnapshot.docs) {
+    console.log(`Found ${nodesSnapshot.docs.length} nodes to copy`);
+    
+    const nodeCopyPromises = nodesSnapshot.docs.map(async (nodeDoc) => {
       const baseNode: Node = nodeDoc.data() as unknown as Node;
       const newNode: DbNode = baseNode as DbNode;
-      await graphService.createNode(newGraphId, newNode);
-    }
+      console.log('Copying node:', newNode.nodeId);
+      return graphService.createNode(newGraphId, newNode);
+    });
+    await Promise.all(nodeCopyPromises);
+    console.log('Finished copying nodes');
 
-    // Copy edges (same principle - the stored data is identical)
+    // Copy edges
+    console.log('Copying edges...');
     const edgesSnapshot = await getDocs(this.getEdgesCollection(templateId));
-    for (const edgeDoc of edgesSnapshot.docs) {
+    console.log(`Found ${edgesSnapshot.docs.length} edges to copy`);
+    
+    const edgeCopyPromises = edgesSnapshot.docs.map(async (edgeDoc) => {
       const baseEdge: Edge = edgeDoc.data() as unknown as Edge;
       const newEdge: DbEdge = baseEdge as DbEdge;
-      await graphService.createEdge(newGraphId, newEdge);
-    }
+      console.log('Copying edge:', newEdge.edgeId);
+      return graphService.createEdge(newGraphId, newEdge);
+    });
+    await Promise.all(edgeCopyPromises);
+    console.log('Finished copying edges');
+    
+    console.log('Template copy process completed successfully');
   }
 
   async getAll(): Promise<TemplateGraph[]> {
