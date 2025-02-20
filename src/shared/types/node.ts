@@ -48,6 +48,11 @@ export interface NodeExtensions {
   [key: string]: unknown;
 }
 
+export interface NodePosition {
+  x: number;
+  y: number;
+}
+
 export interface Node {
   nodeId: string;
   properties: NodeProperties;
@@ -55,4 +60,5 @@ export interface Node {
   progress?: NodeProgress;
   content: NodeContent;
   extensions?: NodeExtensions;
+  nodePosition: NodePosition;
 } 

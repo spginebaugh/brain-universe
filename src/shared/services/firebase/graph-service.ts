@@ -1,11 +1,10 @@
 import { collection, doc, DocumentReference, getDoc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { Graph } from '@/shared/types/graph';
-import { Node } from '@/shared/types/node';
-import { Edge } from '@/shared/types/edge';
 import { FirestoreService } from './firestore-service';
 import { db } from './config';
+import { DbGraph, DbNode, DbEdge } from '@/shared/types/db-types';
+import { TemplateGraph, TemplateNode, TemplateEdge } from '@/shared/types/template-types';
 
-export class GraphService extends FirestoreService<Graph> {
+export class GraphService extends FirestoreService<DbGraph> {
   constructor(userId: string) {
     super(`users/${userId}/graphs`);
   }
@@ -27,31 +26,31 @@ export class GraphService extends FirestoreService<Graph> {
   }
 
   // Graph operations
-  async createGraph(graph: Graph): Promise<void> {
-    await this.create(graph.graphId, graph);
+  async createGraph(graph: TemplateGraph | DbGraph): Promise<void> {
+    await this.create(graph.graphId, graph as DbGraph);
   }
 
-  async getGraph(graphId: string): Promise<Graph | null> {
+  async getGraph(graphId: string): Promise<DbGraph | null> {
     return this.get(graphId);
   }
 
-  async updateGraph(graphId: string, data: Partial<Graph>): Promise<void> {
+  async updateGraph(graphId: string, data: Partial<DbGraph>): Promise<void> {
     await this.update(graphId, data);
   }
 
   // Node operations
-  async createNode(graphId: string, node: Node): Promise<void> {
+  async createNode(graphId: string, node: TemplateNode | DbNode): Promise<void> {
     const nodeRef = this.getNodeRef(graphId, node.nodeId);
-    await setDoc(nodeRef, node);
+    await setDoc(nodeRef, node as DbNode);
   }
 
-  async getNode(graphId: string, nodeId: string): Promise<Node | null> {
+  async getNode(graphId: string, nodeId: string): Promise<DbNode | null> {
     const nodeRef = this.getNodeRef(graphId, nodeId);
     const docSnap = await getDoc(nodeRef);
-    return docSnap.exists() ? (docSnap.data() as Node) : null;
+    return docSnap.exists() ? (docSnap.data() as DbNode) : null;
   }
 
-  async updateNode(graphId: string, nodeId: string, data: Partial<Node>): Promise<void> {
+  async updateNode(graphId: string, nodeId: string, data: Partial<DbNode>): Promise<void> {
     const nodeRef = this.getNodeRef(graphId, nodeId);
     await updateDoc(nodeRef, data);
   }
@@ -62,18 +61,18 @@ export class GraphService extends FirestoreService<Graph> {
   }
 
   // Edge operations
-  async createEdge(graphId: string, edge: Edge): Promise<void> {
+  async createEdge(graphId: string, edge: TemplateEdge | DbEdge): Promise<void> {
     const edgeRef = this.getEdgeRef(graphId, edge.edgeId);
-    await setDoc(edgeRef, edge);
+    await setDoc(edgeRef, edge as DbEdge);
   }
 
-  async getEdge(graphId: string, edgeId: string): Promise<Edge | null> {
+  async getEdge(graphId: string, edgeId: string): Promise<DbEdge | null> {
     const edgeRef = this.getEdgeRef(graphId, edgeId);
     const docSnap = await getDoc(edgeRef);
-    return docSnap.exists() ? (docSnap.data() as Edge) : null;
+    return docSnap.exists() ? (docSnap.data() as DbEdge) : null;
   }
 
-  async updateEdge(graphId: string, edgeId: string, data: Partial<Edge>): Promise<void> {
+  async updateEdge(graphId: string, edgeId: string, data: Partial<DbEdge>): Promise<void> {
     const edgeRef = this.getEdgeRef(graphId, edgeId);
     await updateDoc(edgeRef, data);
   }

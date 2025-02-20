@@ -1,5 +1,5 @@
 import { BaseStandard } from '../types';
-import { Graph, Node, Edge } from '../types/firebase-types';
+import { Graph, Node, Edge, GraphPosition, NodePosition } from '../types/firebase-types';
 import { v4 as uuidv4 } from 'uuid';
 
 interface FirebaseOutput {
@@ -7,6 +7,9 @@ interface FirebaseOutput {
   nodes: Node[];
   edges: Edge[];
 }
+
+const DEFAULT_GRAPH_POSITION: GraphPosition = { x: 0, y: 0 };
+const DEFAULT_NODE_POSITION: NodePosition = { x: 0, y: 0 };
 
 function createGraphForStandard(
   rootStandard: BaseStandard,
@@ -39,7 +42,8 @@ function createGraphForStandard(
         layout: 'tree',
         showProgress: true
       }
-    }
+    },
+    graphPosition: DEFAULT_GRAPH_POSITION
   };
 }
 
@@ -68,7 +72,8 @@ function createNodeFromStandard(standard: BaseStandard, source: string, subjectN
           content: standard.metadata.standardNotation
         }
       }
-    }
+    },
+    nodePosition: DEFAULT_NODE_POSITION
   };
 }
 

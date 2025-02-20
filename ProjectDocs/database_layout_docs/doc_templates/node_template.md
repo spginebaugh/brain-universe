@@ -15,12 +15,6 @@
     prerequisites?: string[]
   },
 
-  progress?: {
-    score?: number,
-    lastAttempt?: timestamp,
-    attempts?: number
-  },
-
   // Flexible Content Based on Type
   content: {
     

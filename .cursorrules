@@ -51,25 +51,44 @@ Backend and Database
 The project directory structure is as below:
 ```
 .
-├── functions # Firebase Cloud Functions
-│   └── src
-├── commonstandards
-│   └── ...
 ├── components.json
 ├── eslint.config.mjs
+├── firebase.json
+├── firestore.indexes.json
+├── firestore.rules
+├── functions
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── src
+│   │   └── index.ts
+│   ├── tsconfig.dev.json
+│   └── tsconfig.json
 ├── next.config.ts
 ├── next-env.d.ts
 ├── package.json
 ├── package-lock.json
 ├── postcss.config.mjs
-├── .env.local
 ├── ProjectDocs
+│   ├── database_layout_docs
+│   │   ├── directory_structure.md
+│   │   └── doc_templates
+│   │       ├── edge_template.md
+│   │       ├── graph_template.md
+│   │       ├── node_template.md
+│   │       └── user_template.md
 │   └── PRD.md
 ├── public
-│       └── ... 
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
 ├── README.md
 ├── src
 │   ├── app
+│   │   ├── api
+│   │   │   └── auth
+│   │   │       └── session
 │   │   ├── favicon.ico
 │   │   ├── globals.css
 │   │   ├── layout.tsx
@@ -82,10 +101,12 @@ The project directory structure is as below:
 │   │   │   ├── layout.tsx
 │   │   │   └── page.tsx
 │   │   └── standards-graph
+│   │       ├── layout.tsx
 │   │       └── page.tsx
 │   ├── features
 │   │   ├── auth
 │   │   │   ├── components
+│   │   │   │   ├── protected-route.tsx
 │   │   │   │   ├── sign-in-form.tsx
 │   │   │   │   └── sign-up-form.tsx
 │   │   │   ├── hooks
@@ -109,14 +130,32 @@ The project directory structure is as below:
 │   │   │   └── utils
 │   │   │       ├── error-mapper.ts
 │   │   │       └── middleware.ts
-│   │   ├── graph-map
+│   │   ├── graph-workspace
 │   │   │   ├── components
-│   │   │   │   └── standards-graph.tsx
+│   │   │   │   ├── standards-graph.tsx
+│   │   │   │   └── template-placement.tsx
 │   │   │   ├── hooks
+│   │   │   │   ├── use-boundary-manager.ts
+│   │   │   │   ├── use-coordinate-transform.ts
+│   │   │   │   ├── use-position-manager.ts
+│   │   │   │   ├── use-standards-data.ts
+│   │   │   │   └── use-template-graphs.ts
 │   │   │   ├── services
+│   │   │   │   ├── boundary-manager.ts
+│   │   │   │   ├── geometry
+│   │   │   │   │   ├── geometry.ts
+│   │   │   │   │   └── index.ts
+│   │   │   │   ├── position-manager.ts
 │   │   │   │   └── standards-service.ts
+│   │   │   ├── stores
+│   │   │   │   ├── graph
+│   │   │   │   │   ├── layout-slice.ts
+│   │   │   │   │   ├── node-slice.ts
+│   │   │   │   │   ├── types.ts
+│   │   │   │   │   └── ui-slice.ts
+│   │   │   │   └── graph-store.ts
 │   │   │   ├── types
-│   │   │   │   ├── graph.ts
+│   │   │   │   ├── position-types.ts
 │   │   │   │   └── standard.ts
 │   │   │   └── utils
 │   │   │       ├── graph-math.ts
@@ -128,8 +167,10 @@ The project directory structure is as below:
 │   │   │   ├── types
 │   │   │   └── utils
 │   │   ├── shop-panel
-│   │   │   └── components
-│   │   │       └── shop-panel.tsx
+│   │   │   ├── components
+│   │   │   │   └── shop-panel.tsx
+│   │   │   └── stores
+│   │   │       └── shop-store.ts
 │   │   └── side-bar
 │   │       ├── components
 │   │       │   └── side-bar.tsx
@@ -141,32 +182,34 @@ The project directory structure is as below:
 │   └── shared
 │       ├── components
 │       │   └── ui
-│       │       └── ...
+│       │       ├── alert.tsx
+│       │       ├── badge.tsx
+│       │       ├── button.tsx
+│       │       ├── card.tsx
+│       │       ├── carousel.tsx
+│       │       ├── dialog.tsx
+│       │       ├── dropdown-menu.tsx
+│       │       ├── form.tsx
+│       │       ├── input.tsx
+│       │       ├── label.tsx
+│       │       └── scroll-area.tsx
 │       ├── hooks
-│       │   ├── use-boundary-manager.ts
-│       │   ├── use-coordinate-transform.ts
-│       │   ├── use-position-manager.ts
-│       │   └── use-standards-data.ts
 │       ├── services
-│       │   ├── boundary-manager.ts
-│       │   ├── firebase
-│       │   │   └── config.ts
-│       │   ├── geometry
-│       │   │   ├── geometry.ts
-│       │   │   └── index.ts
-│       │   └── position-manager.ts
-│       ├── stores
-│       │   ├── graph
-│       │   │   ├── layout-slice.ts
-│       │   │   ├── node-slice.ts
-│       │   │   ├── types.ts
-│       │   │   └── ui-slice.ts
-│       │   ├── graph-store.ts
-│       │   └── shop-store.ts
+│       │   └── firebase
+│       │       ├── config.ts
+│       │       ├── firestore-service.ts
+│       │       ├── graph-service.ts
+│       │       ├── template-service.ts
+│       │       └── user-service.ts
 │       ├── styles
 │       ├── types
-│       │   └── shop.ts
+│       │   ├── edge.ts
+│       │   ├── graph.ts
+│       │   ├── node.ts
+│       │   ├── shop.ts
+│       │   └── user.ts
 │       └── utils
 │           └── tailwind-utils.ts
+├── storage.rules
 └── tsconfig.json
 ```

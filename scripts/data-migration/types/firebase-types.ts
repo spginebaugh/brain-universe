@@ -1,5 +1,16 @@
 import { Timestamp } from 'firebase/firestore';
 
+// Position types
+export interface GraphPosition {
+  x: number;
+  y: number;
+}
+
+export interface NodePosition {
+  x: number;
+  y: number;
+}
+
 // Graph types
 export type GraphType = 'curriculum' | 'quiz_set' | 'learning_exploration' | 'idea_map' | string;
 export type GraphStatus = 'active' | 'archived' | 'completed';
@@ -55,6 +66,7 @@ export interface Graph {
   progress: GraphProgress;
   settings: GraphSettings;
   extensions?: GraphExtensions;
+  graphPosition: GraphPosition;
 }
 
 // Node types
@@ -113,6 +125,7 @@ export interface Node {
   progress?: NodeProgress;
   content: NodeContent;
   extensions?: NodeExtensions;
+  nodePosition: NodePosition;
 }
 
 // Edge types

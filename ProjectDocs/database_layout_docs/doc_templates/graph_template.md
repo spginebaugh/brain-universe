@@ -5,6 +5,10 @@
   rootNodeId: string,
   subjectName: string,
   graphName: string,
+  graphPosition: {
+    x: number,
+    y: number
+  },
   properties: {
     description: string,
     type: "curriculum" | "quiz_set" | "learning_exploration" | "idea_map" | string,

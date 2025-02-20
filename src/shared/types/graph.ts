@@ -4,6 +4,11 @@ export type GraphType = 'curriculum' | 'quiz_set' | 'learning_exploration' | 'id
 export type GraphStatus = 'active' | 'archived' | 'completed';
 export type GraphLayout = 'tree' | 'force' | 'hierarchical' | 'user_defined';
 
+export interface GraphPosition {
+  x: number;
+  y: number;
+}
+
 export interface GraphProperties {
   description: string;
   type: GraphType;
@@ -54,4 +59,5 @@ export interface Graph {
   progress: GraphProgress;
   settings: GraphSettings;
   extensions?: GraphExtensions;
+  graphPosition: GraphPosition;
 } 

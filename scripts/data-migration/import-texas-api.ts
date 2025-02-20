@@ -2,6 +2,7 @@ import { fetchTexasMathStandards } from './services/api';
 import { processTexasApiStandards } from './processors/texas-math-api';
 import { convertToFirebaseFormat } from './processors/firebase-format';
 import { validateStandard } from './validation';
+import { calculateNodePositions, calculateGraphPosition } from './services/position-calculator';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { BaseStandard } from './types';
@@ -67,16 +68,50 @@ async function importTexasStandards() {
         graphNodes.some(node => node.nodeId === edge.toNodeId)
       );
 
+      // Calculate positions for this graph
+      const nodesWithLevels = graphNodes.map(node => ({
+        nodeId: node.nodeId,
+        parentId: graphEdges.find(e => e.toNodeId === node.nodeId)?.fromNodeId || null,
+        level: calculateNodeLevel(node.nodeId, graphEdges),
+        nodePosition: { x: 0, y: 0 }
+      }));
+
+      const nodesWithPositions = calculateNodePositions(nodesWithLevels);
+      const graphPosition = calculateGraphPosition();
+
+      // Update graph and nodes with position information
+      const graphWithPosition = {
+        ...graph,
+        graphPosition
+      };
+
+      // Create a map of node positions for easy lookup
+      const nodePositions = new Map(
+        nodesWithPositions.map(node => [node.nodeId, node.nodePosition])
+      );
+
+      // Update each node with its calculated position
+      const nodesWithUpdatedPositions = graphNodes.map(node => {
+        const position = nodePositions.get(node.nodeId);
+        if (!position) {
+          throw new Error(`Position not calculated for node ${node.nodeId}`);
+        }
+        return {
+          ...node,
+          nodePosition: position
+        };
+      });
+
       // Write files for this graph
       await fs.writeFile(
         path.join(graphDir, 'graph.json'),
-        JSON.stringify(graph, null, 2),
+        JSON.stringify(graphWithPosition, null, 2),
         'utf-8'
       );
 
       await fs.writeFile(
         path.join(graphDir, 'nodes.json'),
-        JSON.stringify(graphNodes, null, 2),
+        JSON.stringify(nodesWithUpdatedPositions, null, 2),
         'utf-8'
       );
 
@@ -110,6 +145,21 @@ function isNodeInGraph(nodeId: string, rootId: string, edges: Array<{ fromNodeId
   
   const parentEdges = edges.filter(edge => edge.toNodeId === nodeId);
   return parentEdges.some(edge => isNodeInGraph(edge.fromNodeId, rootId, edges));
+}
+
+// Helper function to calculate node level
+function calculateNodeLevel(nodeId: string, edges: Array<{ fromNodeId: string; toNodeId: string }>): number {
+  let level = 0;
+  let currentNodeId = nodeId;
+
+  while (true) {
+    const parentEdge = edges.find(e => e.toNodeId === currentNodeId);
+    if (!parentEdge) break;
+    level++;
+    currentNodeId = parentEdge.fromNodeId;
+  }
+
+  return level;
 }
 
 // Add command line argument support

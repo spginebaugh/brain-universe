@@ -1,6 +1,6 @@
 'use client';
 
-import { StandardsGraph } from '@/features/graph-map/components/standards-graph';
+import { StandardsGraph } from '@/features/graph-workspace/components/standards-graph';
 
 export default function StandardsGraphPage() {
   return (

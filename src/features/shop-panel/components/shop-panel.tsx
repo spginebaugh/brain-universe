@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ShoppingCart, X, Sparkles, Wand2, Crown, Trophy } from 'lucide-react';
-import { useShopStore } from '@/shared/stores/shop-store';
+import { useShopStore } from '@/features/shop-panel/stores/shop-store';
 import { Button } from '@/shared/components/ui/button';
 import { ScrollArea } from '@/shared/components/ui/scroll-area';
 import { Badge } from '@/shared/components/ui/badge';
