@@ -21,11 +21,14 @@ import { useCallback, useMemo, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useTemplateSelectionStore } from '@/features/side-bar/stores/template-selection-store';
 import { useRootNodeCreationStore } from '@/features/side-bar/stores/root-node-creation-store';
+import { useNodeCreationStore } from '@/features/side-bar/stores/node-creation-store';
+import { useEdgeCreationStore } from '@/features/side-bar/stores/edge-creation-store';
 import { TemplateService } from '@/shared/services/firebase/template-service';
 import { auth } from '@/shared/services/firebase/config';
 import { Alert, AlertDescription } from '@/shared/components/ui/alert';
 import { Button } from '@/shared/components/ui/button';
-import { DbGraph, DbNode } from '@/shared/types/db-types';
+import { DbGraph, DbNode, DbEdge } from '@/shared/types/db-types';
+import { NodeInfoDialog } from './node-info-dialog';
 
 interface GraphWorkspaceProps {
   userId: string;
@@ -53,7 +56,7 @@ const transformGraphsToReactFlow = (graphs: FlowGraph[]) => {
         extensions: node.extensions
       },
       style: {
-        background: '#fff',
+        background: node.nodeId === graph.rootNodeId ? '#e0f2e9' : '#fff',
         border: '1px solid #ddd',
         padding: 10,
         borderRadius: 5
@@ -160,10 +163,25 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
   const { graphs, isLoading, error, refresh } = useGraphWorkspace(userId);
   const graphService = useMemo(() => new GraphService(userId), [userId]);
   const { selectedTemplateId, clearSelection, isPlacementMode } = useTemplateSelectionStore();
-  const { isCreationMode, setCreationMode } = useRootNodeCreationStore();
+  const { isCreationMode: isRootNodeCreationMode, setCreationMode: setRootNodeCreationMode } = useRootNodeCreationStore();
+  const { 
+    isCreationMode: isNewNodeCreationMode, 
+    selectedParentGraphId,
+    setSelectedParentGraphId,
+    reset: resetNodeCreation 
+  } = useNodeCreationStore();
+  const {
+    isCreationMode: isEdgeCreationMode,
+    selectedFirstNodeId,
+    selectedGraphId: selectedEdgeGraphId,
+    setSelectedFirstNode,
+    resetSelection: resetEdgeCreation
+  } = useEdgeCreationStore();
   const reactFlowInstance = useReactFlow();
   const [isPlacing, setIsPlacing] = useState(false);
   const [selectedGraphId, setSelectedGraphId] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<Node<FlowNodeData> | null>(null);
+  const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
   
   // Initialize node and edge states with correct types
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>([]);
@@ -183,13 +201,58 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
   }, [graphs, setNodes, setEdges]);
 
   const onNodeClick = useCallback((event: React.MouseEvent<Element, MouseEvent>, node: Node<FlowNodeData>) => {
+    if (isNewNodeCreationMode && !selectedParentGraphId) {
+      setSelectedParentGraphId(node.data.graphId);
+      event.preventDefault();
+      return;
+    }
+
+    if (isEdgeCreationMode) {
+      if (!selectedFirstNodeId) {
+        setSelectedFirstNode(node.id, node.data.graphId);
+      } else {
+        handleSecondNodeSelection(node.id, node.data.graphId);
+      }
+      event.preventDefault();
+      return;
+    }
+    
     if (event.shiftKey) {
       setSelectedGraphId(node.data.graphId);
       event.preventDefault();
     } else {
       setSelectedGraphId(null);
     }
-  }, []);
+  }, [isNewNodeCreationMode, selectedParentGraphId, setSelectedParentGraphId, isEdgeCreationMode, selectedFirstNodeId, setSelectedFirstNode]);
+
+  const handleSecondNodeSelection = useCallback(async (secondNodeId: string, secondNodeGraphId: string) => {
+    if (!selectedFirstNodeId || !selectedEdgeGraphId) return;
+    
+    // Verify both nodes are from the same graph
+    if (selectedEdgeGraphId !== secondNodeGraphId) {
+      alert('Error: Both nodes must be from the same graph');
+      resetEdgeCreation();
+      return;
+    }
+
+    try {
+      const newEdge = {
+        edgeId: crypto.randomUUID(),
+        fromNodeId: selectedFirstNodeId,
+        toNodeId: secondNodeId,
+        isDirected: true,
+        relationshipType: 'tree_edge',
+      } as unknown as DbEdge; // Cast to DbEdge since we can't create a unique symbol
+
+      await graphService.createEdge(selectedEdgeGraphId, newEdge);
+      await refresh();
+      resetEdgeCreation();
+    } catch (error) {
+      console.error('Failed to create edge:', error);
+      alert('Failed to create edge. Please try again.');
+      resetEdgeCreation();
+    }
+  }, [selectedFirstNodeId, selectedEdgeGraphId, graphService, refresh, resetEdgeCreation]);
 
   const onNodeDragStop: OnNodeDrag = useCallback(async (event, node) => {
     try {
@@ -289,15 +352,74 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
   }, [selectedGraphId, graphs, setNodes]);
 
   const handlePaneClick = useCallback(async (event: React.MouseEvent) => {
+    const position = reactFlowInstance.screenToFlowPosition({
+      x: event.clientX,
+      y: event.clientY,
+    });
+
+    if (isNewNodeCreationMode && selectedParentGraphId && !isPlacing) {
+      try {
+        setIsPlacing(true);
+        toast.loading('Creating new node...', { id: 'node-creation' });
+
+        const newNodeId = crypto.randomUUID();
+        
+        // Get the parent graph
+        const parentGraph = graphs.find(g => g.graphId === selectedParentGraphId);
+        if (!parentGraph) {
+          throw new Error('Parent graph not found');
+        }
+
+        // Calculate relative position by subtracting graph position
+        const relativePosition = {
+          x: position.x - (parentGraph.graphPosition?.x || 0),
+          y: position.y - (parentGraph.graphPosition?.y || 0)
+        };
+        
+        // Create the new node
+        const newNode = {
+          nodeId: newNodeId,
+          properties: {
+            title: '',
+            description: '',
+            type: 'concept'
+          },
+          metadata: {
+            status: 'active',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            tags: []
+          },
+          content: {
+            text: '',
+            resources: []
+          },
+          nodePosition: relativePosition
+        } as unknown as DbNode;
+
+        await graphService.createNode(selectedParentGraphId, newNode);
+        await refresh();
+        resetNodeCreation();
+        
+        // Open the node info dialog for immediate editing
+        const createdNode = nodes.find(n => n.id === newNodeId);
+        if (createdNode) {
+          setSelectedNode(createdNode);
+          setIsInfoDialogOpen(true);
+        }
+
+        toast.success('Node created successfully', { id: 'node-creation' });
+      } catch (error) {
+        console.error('Failed to create new node:', error);
+        toast.error('Failed to create new node', { id: 'node-creation' });
+      } finally {
+        setIsPlacing(false);
+      }
+      return;
+    }
+
     // Clear graph selection when clicking on the workspace
     setSelectedGraphId(null);
-
-    // Get click position in flow coordinates
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const position = reactFlowInstance.screenToFlowPosition({
-      x: event.clientX - bounds.left,
-      y: event.clientY - bounds.top,
-    });
 
     if (isPlacementMode && selectedTemplateId && auth?.currentUser && !isPlacing) {
       try {
@@ -321,10 +443,10 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
       } finally {
         setIsPlacing(false);
       }
-    } else if (isCreationMode && auth?.currentUser && !isPlacing) {
+    } else if (isRootNodeCreationMode && auth?.currentUser && !isPlacing) {
       try {
         setIsPlacing(true);
-        setCreationMode(false); // Clear creation mode immediately to remove guide
+        setRootNodeCreationMode(false); // Clear creation mode immediately to remove guide
         toast.loading('Creating new root node...', { id: 'root-node-creation' });
 
         const newGraphId = crypto.randomUUID();
@@ -392,7 +514,18 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
         setIsPlacing(false);
       }
     }
-  }, [isPlacementMode, selectedTemplateId, reactFlowInstance, clearSelection, isPlacing, refresh, auth?.currentUser, isCreationMode, setCreationMode, graphService]);
+  }, [isNewNodeCreationMode, selectedParentGraphId, reactFlowInstance, graphService, refresh, resetNodeCreation, graphs, nodes, isPlacing, isPlacementMode, selectedTemplateId, clearSelection, auth?.currentUser, isRootNodeCreationMode, setRootNodeCreationMode]);
+
+  const onNodeDoubleClick = useCallback((event: React.MouseEvent, node: Node<FlowNodeData>) => {
+    event.preventDefault();
+    setSelectedNode(node);
+    setIsInfoDialogOpen(true);
+  }, []);
+
+  const handleCloseInfoDialog = useCallback(() => {
+    setIsInfoDialogOpen(false);
+    setSelectedNode(null);
+  }, []);
 
   if (isLoading) {
     return <div className="flex h-screen w-full items-center justify-center">Loading...</div>;
@@ -408,16 +541,42 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
 
   return (
     <div className="h-screen w-full">
+      <NodeInfoDialog 
+        node={selectedNode}
+        isOpen={isInfoDialogOpen}
+        onClose={handleCloseInfoDialog}
+        userId={userId}
+      />
       {isPlacementMode && (
         <PlacementGuide 
           onCancel={clearSelection} 
           message="Click anywhere in the workspace to place your graph" 
         />
       )}
-      {isCreationMode && (
+      {isRootNodeCreationMode && (
         <PlacementGuide 
-          onCancel={() => setCreationMode(false)} 
+          onCancel={() => setRootNodeCreationMode(false)} 
           message="Click anywhere in the workspace to place your new root node" 
+        />
+      )}
+      {isNewNodeCreationMode && !selectedParentGraphId && (
+        <PlacementGuide 
+          onCancel={resetNodeCreation} 
+          message="Select a graph to create new node in" 
+        />
+      )}
+      {isNewNodeCreationMode && selectedParentGraphId && (
+        <PlacementGuide 
+          onCancel={resetNodeCreation} 
+          message="Click anywhere to place new node" 
+        />
+      )}
+      {isEdgeCreationMode && (
+        <PlacementGuide 
+          onCancel={resetEdgeCreation} 
+          message={!selectedFirstNodeId 
+            ? "Select First Node" 
+            : "Select Second Node from the same graph"} 
         />
       )}
       <ReactFlow
@@ -434,8 +593,9 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
         onNodeDrag={onNodeDrag}
         onNodeDragStop={onNodeDragStop}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         onPaneClick={handlePaneClick}
-        className={`${isPlacementMode || isCreationMode ? 'cursor-crosshair' : ''} ${selectedGraphId ? 'cursor-move' : ''}`}
+        className={`${isPlacementMode || isRootNodeCreationMode || isNewNodeCreationMode || isEdgeCreationMode ? 'cursor-crosshair' : ''} ${selectedGraphId ? 'cursor-move' : ''}`}
       >
         <Background />
         <Controls />

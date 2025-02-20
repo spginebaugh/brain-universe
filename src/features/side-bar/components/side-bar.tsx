@@ -1,6 +1,6 @@
 'use client';
 
-import { Network, ShoppingCart, Plus } from 'lucide-react';
+import { Network, ShoppingCart, Plus, PlusSquare, ArrowRightCircle } from 'lucide-react';
 import { useTemplateGraphs } from '@/features/side-bar/hooks/use-template-graphs';
 import { useShopStore } from '@/features/shop-panel/stores/shop-store';
 import {
@@ -12,6 +12,8 @@ import {
 import { TemplateGraph } from '@/shared/types/template-types';
 import { useTemplateSelectionStore } from '../stores/template-selection-store';
 import { useRootNodeCreationStore } from '../stores/root-node-creation-store';
+import { useNodeCreationStore } from '../stores/node-creation-store';
+import { useEdgeCreationStore } from '../stores/edge-creation-store';
 
 interface SideBarProps {
   className?: string;
@@ -21,18 +23,36 @@ export const SideBar = ({ className = '' }: SideBarProps) => {
   const { data: templates, isLoading } = useTemplateGraphs();
   const { toggleShop } = useShopStore();
   const { setSelectedTemplate } = useTemplateSelectionStore();
-  const { setCreationMode } = useRootNodeCreationStore();
+  const { setCreationMode: setRootNodeCreationMode } = useRootNodeCreationStore();
+  const { setCreationMode: setNodeCreationMode } = useNodeCreationStore();
+  const { setCreationMode: setEdgeCreationMode } = useEdgeCreationStore();
 
   return (
     <div 
       className={`w-16 h-screen bg-gray-900 fixed left-0 top-0 flex flex-col items-center gap-4 py-4 ${className}`}
     >
       <button
-        onClick={() => setCreationMode(true)}
+        onClick={() => setRootNodeCreationMode(true)}
         className="w-10 h-10 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-300 hover:text-white transition-colors"
         title="Create New Root Node"
       >
         <Plus className="w-6 h-6" />
+      </button>
+
+      <button
+        onClick={() => setNodeCreationMode(true)}
+        className="w-10 h-10 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+        title="Add New Node"
+      >
+        <PlusSquare className="w-6 h-6" />
+      </button>
+
+      <button
+        onClick={() => setEdgeCreationMode(true)}
+        className="w-10 h-10 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+        title="Add New Edge"
+      >
+        <ArrowRightCircle className="w-6 h-6" />
       </button>
 
       <DropdownMenu>
