@@ -2,27 +2,30 @@ import { useState, useEffect } from 'react';
 import { WorkspaceService } from '../services/workspace-service';
 import type { WorkspaceState } from '../types/workspace-types';
 
-export const useGraphWorkspace = (userId: string, graphId: string) => {
+export const useGraphWorkspace = (userId: string) => {
   const [state, setState] = useState<WorkspaceState>({
-    graph: null,
+    graphs: [],
     isLoading: true,
     error: null,
   });
 
   useEffect(() => {
-    const workspaceService = new WorkspaceService(userId, graphId);
+    const workspaceService = new WorkspaceService(userId);
 
     const fetchData = async () => {
       try {
-        const graph = await workspaceService.fetchWorkspaceData();
-        setState({ graph, isLoading: false, error: null });
+        console.log('Fetching graphs for user:', userId);
+        const graphs = await workspaceService.fetchAllGraphs();
+        console.log('Fetched graphs:', graphs);
+        setState({ graphs, isLoading: false, error: null });
       } catch (error) {
-        setState({ graph: null, isLoading: false, error: error as Error });
+        console.error('Error fetching graphs:', error);
+        setState({ graphs: [], isLoading: false, error: error as Error });
       }
     };
 
     fetchData();
-  }, [userId, graphId]);
+  }, [userId]);
 
   return state;
 }; 

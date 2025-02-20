@@ -7,7 +7,7 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    router.push('/standards-graph');
+    router.push('/graph-workspace');
   }, [router]);
 
   return null;

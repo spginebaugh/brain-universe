@@ -32,7 +32,7 @@ React Usage
  - Use content variables for static content outside render functions.
 
 State Management 
- - Use Zustand for state management.
+ - Use ReactFlows state hooks to manage state for graph-related use. Otherwise, use Zustand for state management.
  - Minimize the use of `useEffect` and `setState`. Favor React Server Components (RSC) and Next.js SSR features.
 
 Error Handling and Validation
@@ -47,6 +47,36 @@ Backend and Database
  - Use Firebase for backend services, including authentication and database interactions.
  - Follow Firebase guidelines for security and performance.
  - Use Firebase Auth for user authentication and management.
+
+The firebase directory structure is as below:
+```
+users
+  └─ {userId} (doc) // User profile
+        └─ graphs (subcollection)
+            └─ {graphId} (doc) // Graph profile
+                ├─ nodes (subcollection)
+                    ├─ {nodeId_1} (doc)
+                    ├─ {nodeId_2} (doc)
+                    └─ {nodeId_N} (doc)
+                └─ edges (subcollection)
+                    ├─ {edgeId_1} (doc)
+                    ├─ {edgeId_2} (doc)
+                    └─ {edgeId_K} (doc)
+
+templates
+    └─ {template_source_name} (subcollection) // Template source, e.g. texas_TEKS
+        └─ {subject} (subcollection) // e.g. Math
+                └─ {graphId} (doc) // Graph profile
+                    ├─ nodes (subcollection)
+                        ├─ {nodeId_1} (doc)
+                        ├─ {nodeId_2} (doc)
+                        └─ {nodeId_N} (doc)
+                    └─ edges (subcollection)
+                        ├─ {edgeId_1} (doc)
+                        ├─ {edgeId_2} (doc)
+                        └─ {edgeId_K} (doc)
+```
+
 
 The project directory structure is as below:
 ```
@@ -91,16 +121,16 @@ The project directory structure is as below:
 │   │   │       └── session
 │   │   ├── favicon.ico
 │   │   ├── globals.css
+│   │   ├── graph-workspace
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx
 │   │   ├── layout.tsx
 │   │   ├── page.tsx
 │   │   ├── providers.tsx
 │   │   ├── sign-in
 │   │   │   ├── layout.tsx
 │   │   │   └── page.tsx
-│   │   ├── sign-up
-│   │   │   ├── layout.tsx
-│   │   │   └── page.tsx
-│   │   └── standards-graph
+│   │   └── sign-up
 │   │       ├── layout.tsx
 │   │       └── page.tsx
 │   ├── features
@@ -132,34 +162,15 @@ The project directory structure is as below:
 │   │   │       └── middleware.ts
 │   │   ├── graph-workspace
 │   │   │   ├── components
-│   │   │   │   ├── standards-graph.tsx
-│   │   │   │   └── template-placement.tsx
+│   │   │   │   └── graph-workspace.tsx
 │   │   │   ├── hooks
-│   │   │   │   ├── use-boundary-manager.ts
-│   │   │   │   ├── use-coordinate-transform.ts
-│   │   │   │   ├── use-position-manager.ts
-│   │   │   │   ├── use-standards-data.ts
-│   │   │   │   └── use-template-graphs.ts
+│   │   │   │   └── use-graph-workspace.ts
 │   │   │   ├── services
-│   │   │   │   ├── boundary-manager.ts
-│   │   │   │   ├── geometry
-│   │   │   │   │   ├── geometry.ts
-│   │   │   │   │   └── index.ts
-│   │   │   │   ├── position-manager.ts
-│   │   │   │   └── standards-service.ts
+│   │   │   │   └── workspace-service.ts
 │   │   │   ├── stores
-│   │   │   │   ├── graph
-│   │   │   │   │   ├── layout-slice.ts
-│   │   │   │   │   ├── node-slice.ts
-│   │   │   │   │   ├── types.ts
-│   │   │   │   │   └── ui-slice.ts
-│   │   │   │   └── graph-store.ts
 │   │   │   ├── types
-│   │   │   │   ├── position-types.ts
-│   │   │   │   └── standard.ts
+│   │   │   │   └── workspace-types.ts
 │   │   │   └── utils
-│   │   │       ├── graph-math.ts
-│   │   │       └── graph-utils.ts
 │   │   ├── progress-tracking
 │   │   │   ├── components
 │   │   │   ├── hooks
@@ -175,6 +186,7 @@ The project directory structure is as below:
 │   │       ├── components
 │   │       │   └── side-bar.tsx
 │   │       ├── hooks
+│   │       │   └── use-template-graphs.ts
 │   │       ├── services
 │   │       ├── types
 │   │       └── utils
@@ -203,11 +215,14 @@ The project directory structure is as below:
 │       │       └── user-service.ts
 │       ├── styles
 │       ├── types
-│       │   ├── edge.ts
-│       │   ├── graph.ts
-│       │   ├── node.ts
-│       │   ├── shop.ts
-│       │   └── user.ts
+│       │   ├── db-types.ts // database extensions of base edge, graph, and node types
+│       │   ├── edge.ts // base edge type
+│       │   ├── graph.ts // base graph type
+│       │   ├── index.ts
+│       │   ├── node.ts // base node type
+│       │   ├── shop.ts 
+│       │   ├── template-types.ts // template extensions of base edge, graph, and node types
+│       │   └── user.ts 
 │       └── utils
 │           └── tailwind-utils.ts
 ├── storage.rules

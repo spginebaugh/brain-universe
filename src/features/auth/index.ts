@@ -2,6 +2,7 @@
 export { SignInForm } from './components/sign-in-form';
 export { SignUpForm } from './components/sign-up-form';
 export { AuthLayout } from './layouts/auth-layout';
+export { ProtectedRoute } from './components/protected-route';
 
 // Hooks
 export { useAuth } from './hooks/use-auth';

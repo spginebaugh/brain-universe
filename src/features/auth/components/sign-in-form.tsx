@@ -37,7 +37,7 @@ export function SignInForm() {
     try {
       setError(null);
       await signIn(data);
-      router.push('/standards-graph');
+      router.push('/graph-workspace');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred during sign in');
     }
