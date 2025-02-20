@@ -24,6 +24,8 @@ import { GraphService } from '@/shared/services/firebase/graph-service';
 import { toast } from 'sonner';
 import { useGraphWorkspace } from '../hooks/use-graph-workspace';
 import { TextSection } from '@/shared/types/node';
+import { NodePosition } from '@/shared/types/node';
+import { calculateRelativePosition } from '../utils/position-utils';
 
 interface NodeInfoDialogProps {
   node: Node<FlowNodeData> | null;
@@ -32,9 +34,9 @@ interface NodeInfoDialogProps {
   userId: string;
 }
 
-type NodePosition = 'top' | 'right' | 'bottom' | 'left' | null;
+type NodeHandlePosition = 'top' | 'right' | 'bottom' | 'left' | null;
 
-const positionOptions: { value: NodePosition; label: string }[] = [
+const positionOptions: { value: NodeHandlePosition; label: string }[] = [
   { value: 'top', label: 'Top' },
   { value: 'right', label: 'Right' },
   { value: 'bottom', label: 'Bottom' },
@@ -42,10 +44,22 @@ const positionOptions: { value: NodePosition; label: string }[] = [
 ];
 
 export const NodeInfoDialog = ({ node, isOpen, onClose, userId }: NodeInfoDialogProps) => {
-  const { refresh } = useGraphWorkspace(userId);
+  const { refresh, graphs } = useGraphWorkspace(userId);
   const graphService = new GraphService(userId);
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState<FlowNodeData>(node?.data || {} as FlowNodeData);
+  const [nodePosition, setNodePosition] = useState<NodePosition>({ x: 0, y: 0 });
+
+  const cleanup = useCallback(() => {
+    setIsEditing(false);
+    setEditedData(node?.data || {} as FlowNodeData);
+    setNodePosition({ x: 0, y: 0 });
+  }, [node]);
+
+  const handleClose = useCallback(() => {
+    cleanup();
+    onClose();
+  }, [cleanup, onClose]);
 
   const handleSave = useCallback(async () => {
     if (!node) return;
@@ -53,11 +67,12 @@ export const NodeInfoDialog = ({ node, isOpen, onClose, userId }: NodeInfoDialog
     try {
       toast.loading('Saving changes...', { id: 'save-node' });
       
-      // Update node data
+      // Update node data including position
       await graphService.updateNode(editedData.graphId, node.id, {
         properties: editedData.properties,
         metadata: editedData.metadata,
-        content: editedData.content
+        content: editedData.content,
+        nodePosition: nodePosition
       });
 
       // If this is a root node and the title changed, update the graph name
@@ -68,30 +83,37 @@ export const NodeInfoDialog = ({ node, isOpen, onClose, userId }: NodeInfoDialog
       }
 
       await refresh();
-      setIsEditing(false);
+      cleanup();
       toast.success('Changes saved successfully', { id: 'save-node' });
     } catch (error) {
       console.error('Failed to save changes:', error);
       toast.error('Failed to save changes', { id: 'save-node' });
     }
-  }, [editedData, graphService, node, refresh]);
+  }, [editedData, graphService, node, refresh, nodePosition, cleanup]);
 
   const handleEdit = useCallback(() => {
     if (!node) return;
     setEditedData(node.data);
+    
+    // Get the current graph
+    const graph = graphs.find(g => g.graphId === node.data.graphId);
+    if (!graph) return;
+
+    // Calculate relative position from the node's current position
+    const relativePosition = calculateRelativePosition(node.position, graph.graphPosition);
+    setNodePosition(relativePosition);
     setIsEditing(true);
-  }, [node]);
+  }, [node, graphs]);
 
   const handleCancel = useCallback(() => {
     if (!node) return;
-    setIsEditing(false);
-    setEditedData(node.data);
-  }, [node]);
+    cleanup();
+  }, [node, cleanup]);
 
   const handleInputChange = useCallback((
     section: 'properties' | 'metadata' | 'content',
     field: string,
-    value: string | Record<string, TextSection> | NodePosition
+    value: string | Record<string, TextSection> | NodeHandlePosition
   ) => {
     setEditedData(prev => ({
       ...prev,
@@ -102,12 +124,20 @@ export const NodeInfoDialog = ({ node, isOpen, onClose, userId }: NodeInfoDialog
     }));
   }, []);
 
+  const handlePositionChange = useCallback((axis: 'x' | 'y', value: string) => {
+    const numValue = parseFloat(value) || 0;
+    setNodePosition(prev => ({
+      ...prev,
+      [axis]: numValue
+    }));
+  }, []);
+
   if (!node) return null;
 
   const { properties, metadata, content, progress } = isEditing ? editedData : node.data;
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleClose}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden">
         <DialogHeader>
           <DialogTitle className="text-xl font-bold">
@@ -147,7 +177,7 @@ export const NodeInfoDialog = ({ node, isOpen, onClose, userId }: NodeInfoDialog
                         <Select
                           value={properties.sourcePosition ?? 'top'}
                           onValueChange={(value: string) => 
-                            handleInputChange('properties', 'sourcePosition', value === '' ? 'top' : value as NodePosition)
+                            handleInputChange('properties', 'sourcePosition', value === '' ? 'top' : value as NodeHandlePosition)
                           }
                         >
                           <SelectTrigger>
@@ -167,7 +197,7 @@ export const NodeInfoDialog = ({ node, isOpen, onClose, userId }: NodeInfoDialog
                         <Select
                           value={properties.targetPosition ?? 'bottom'}
                           onValueChange={(value: string) => 
-                            handleInputChange('properties', 'targetPosition', value === '' ? 'bottom' : value as NodePosition)
+                            handleInputChange('properties', 'targetPosition', value === '' ? 'bottom' : value as NodeHandlePosition)
                           }
                         >
                           <SelectTrigger>
@@ -181,6 +211,26 @@ export const NodeInfoDialog = ({ node, isOpen, onClose, userId }: NodeInfoDialog
                             ))}
                           </SelectContent>
                         </Select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <div className="space-y-2">
+                        <label className="text-sm text-gray-500">X Position (relative to graph)</label>
+                        <Input
+                          type="number"
+                          value={nodePosition.x}
+                          onChange={(e) => handlePositionChange('x', e.target.value)}
+                          placeholder="X coordinate"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm text-gray-500">Y Position (relative to graph)</label>
+                        <Input
+                          type="number"
+                          value={nodePosition.y}
+                          onChange={(e) => handlePositionChange('y', e.target.value)}
+                          placeholder="Y coordinate"
+                        />
                       </div>
                     </div>
                   </>

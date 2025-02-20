@@ -47,7 +47,7 @@ export class WorkspaceService {
       id: edge.edgeId,
       source: edge.fromNodeId,
       target: edge.toNodeId,
-      type: 'default',
+      type: 'step',
       data: {
         graphId: graph.graphId,
         properties: {
