@@ -1,5 +1,5 @@
 import { Node, useReactFlow, Position } from '@xyflow/react';
-import { FlowNodeData } from '../types/workspace-types';
+import { FlowNodeData } from '../../graph-workspace/types/workspace-types';
 import { Dialog, DialogContent, DialogTitle, DialogFooter } from '@/shared/components/ui/dialog';
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
@@ -9,9 +9,9 @@ import { GraphService } from '@/shared/services/firebase/graph-service';
 import { DbNode, DbEdge } from '@/shared/types/db-types';
 import { toast } from 'sonner';
 import { auth } from '@/shared/services/firebase/config';
-import { createNewNode, createNewEdge } from '../utils/entity-templates';
-import { calculateRelativePosition } from '../utils/position-utils';
-import { useGraphWorkspace } from '../hooks/use-graph-workspace';
+import { createNewNode, createNewEdge } from '../../graph-workspace/utils/entity-templates';
+import { calculateRelativePosition } from '../../graph-workspace/utils/position-utils';
+import { useGraphWorkspace } from '../../graph-workspace/hooks/use-graph-workspace';
 
 interface RoadmapGenerationProps {
   node: Node<FlowNodeData>;
