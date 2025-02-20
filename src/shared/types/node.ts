@@ -7,6 +7,8 @@ export interface NodeProperties {
   title: string;
   description: string;
   type: NodeType;
+  sourcePosition?: 'top' | 'right' | 'bottom' | 'left' | null;
+  targetPosition?: 'top' | 'right' | 'bottom' | 'left' | null;
 }
 
 export interface NodeMetadata {

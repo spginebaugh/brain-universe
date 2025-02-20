@@ -1,3 +1,8 @@
+Deepsylabus
+    A video
+    Writen blog or textbooks
+    A check for understanding
+
 BrainUniverse: an AI-powered knowledge repository and exploration platform
 
 1. Overview

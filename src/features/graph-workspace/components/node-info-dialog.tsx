@@ -11,6 +11,13 @@ import { Badge } from '@/shared/components/ui/badge';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Textarea } from '@/shared/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { FlowNodeData } from '../types/workspace-types';
 import { useState, useCallback } from 'react';
 import { GraphService } from '@/shared/services/firebase/graph-service';
@@ -24,6 +31,15 @@ interface NodeInfoDialogProps {
   onClose: () => void;
   userId: string;
 }
+
+type NodePosition = 'top' | 'right' | 'bottom' | 'left' | null;
+
+const positionOptions: { value: NodePosition; label: string }[] = [
+  { value: 'top', label: 'Top' },
+  { value: 'right', label: 'Right' },
+  { value: 'bottom', label: 'Bottom' },
+  { value: 'left', label: 'Left' },
+];
 
 export const NodeInfoDialog = ({ node, isOpen, onClose, userId }: NodeInfoDialogProps) => {
   const { refresh } = useGraphWorkspace(userId);
@@ -75,7 +91,7 @@ export const NodeInfoDialog = ({ node, isOpen, onClose, userId }: NodeInfoDialog
   const handleInputChange = useCallback((
     section: 'properties' | 'metadata' | 'content',
     field: string,
-    value: string | Record<string, TextSection>
+    value: string | Record<string, TextSection> | NodePosition
   ) => {
     setEditedData(prev => ({
       ...prev,
@@ -116,26 +132,78 @@ export const NodeInfoDialog = ({ node, isOpen, onClose, userId }: NodeInfoDialog
               <h3 className="text-lg font-semibold mb-2">Basic Information</h3>
               <div className="space-y-2">
                 {isEditing ? (
-                  <Textarea
-                    value={properties.description}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => 
-                      handleInputChange('properties', 'description', e.target.value)
-                    }
-                    placeholder="Description"
-                    className="min-h-[100px]"
-                  />
+                  <>
+                    <Textarea
+                      value={properties.description}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => 
+                        handleInputChange('properties', 'description', e.target.value)
+                      }
+                      placeholder="Description"
+                      className="min-h-[100px]"
+                    />
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-sm text-gray-500">Source Position</label>
+                        <Select
+                          value={properties.sourcePosition ?? 'top'}
+                          onValueChange={(value: string) => 
+                            handleInputChange('properties', 'sourcePosition', value === '' ? 'top' : value as NodePosition)
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select source position" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {positionOptions.map((option) => (
+                              <SelectItem key={option.label} value={option.value ?? ''}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm text-gray-500">Target Position</label>
+                        <Select
+                          value={properties.targetPosition ?? 'bottom'}
+                          onValueChange={(value: string) => 
+                            handleInputChange('properties', 'targetPosition', value === '' ? 'bottom' : value as NodePosition)
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select target position" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {positionOptions.map((option) => (
+                              <SelectItem key={option.label} value={option.value ?? ''}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </>
                 ) : (
-                  <p className="text-gray-600">{properties.description}</p>
+                  <>
+                    <p className="text-gray-600">{properties.description}</p>
+                    <div className="flex gap-2 flex-wrap">
+                      <Badge variant="outline">{properties.type}</Badge>
+                      <Badge 
+                        variant="outline" 
+                        className={metadata.status === 'completed' ? 'bg-green-100' : ''}
+                      >
+                        {metadata.status}
+                      </Badge>
+                      {properties.sourcePosition && (
+                        <Badge variant="outline">Source: {properties.sourcePosition}</Badge>
+                      )}
+                      {properties.targetPosition && (
+                        <Badge variant="outline">Target: {properties.targetPosition}</Badge>
+                      )}
+                    </div>
+                  </>
                 )}
-                <div className="flex gap-2 flex-wrap">
-                  <Badge variant="outline">{properties.type}</Badge>
-                  <Badge 
-                    variant="outline" 
-                    className={metadata.status === 'completed' ? 'bg-green-100' : ''}
-                  >
-                    {metadata.status}
-                  </Badge>
-                </div>
               </div>
             </section>
 
