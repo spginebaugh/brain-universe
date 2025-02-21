@@ -1,0 +1,8 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "deep_research": "open_deep_research.graph:graph"
+  },
+  "env": ".env",
+  "python_version": "3.11"
+} 

@@ -1,0 +1,11 @@
+open-deep-research
+langchain>=0.1.0
+langchain-core>=0.1.10
+langgraph>=0.0.25
+langgraph-cli>=0.0.25
+tavily-python>=0.2.6
+anthropic>=0.7.0
+openai>=1.6.0
+python-dotenv>=1.0.0
+fastapi>=0.109.0
+uvicorn>=0.27.0 

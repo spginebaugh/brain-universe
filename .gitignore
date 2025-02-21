@@ -43,6 +43,13 @@ next-env.d.ts
 # Firebase credentials
 scripts/data-migration/serviceAccountKey.json
 
+# Python
+src/features/deep-research/services/python/.env
+src/features/deep-research/services/python/.venv/
+src/features/deep-research/services/python/__pycache__/
+src/features/deep-research/services/python/*.pyc
+src/features/deep-research/services/python/.langgraph_api/
+
 /commonstandards/
 /public/commonstandards/
 /scripts/data-migration/processed_JSON/
