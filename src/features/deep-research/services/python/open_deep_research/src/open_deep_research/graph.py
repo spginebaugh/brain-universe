@@ -298,6 +298,7 @@ def write_section(state: SectionState, config: RunnableConfig) -> Command[Litera
     
     section = state["section"]
     source_str = state["source_str"]
+    sections = state["sections"]
     configurable = Configuration.from_runnable_config(config)
 
     # Format system instructions
@@ -325,11 +326,31 @@ def write_section(state: SectionState, config: RunnableConfig) -> Command[Litera
         logger.error(f"Error parsing section content: {e}", exc_info=True)
         section.content = section_response.content
 
-    # Always end after writing
-    return Command(
-        update={"completed_sections": [section]},
-        goto=END
-    )
+    # Find the index of the current section
+    current_index = next((i for i, s in enumerate(sections) if s.name == section.name), -1)
+    
+    # Check if there are more sections to process
+    if current_index < len(sections) - 1:
+        # Move to next section
+        next_section = sections[current_index + 1]
+        logger.info(f"Moving to next section: {next_section.name}")
+        return Command(
+            update={
+                "completed_sections": state.get("completed_sections", []) + [section],
+                "section": next_section,
+                "search_iterations": 0,
+                "search_queries": [],
+                "source_str": ""
+            },
+            goto="generate_queries"
+        )
+    else:
+        # All sections complete
+        logger.info("All sections completed")
+        return Command(
+            update={"completed_sections": state.get("completed_sections", []) + [section]},
+            goto=END
+        )
 
 def write_final_sections(state: SectionState):
     """Write final sections of the report"""
@@ -378,12 +399,25 @@ def gather_completed_sections(state: ReportState):
 
 # Report section sub-graph
 section_builder = StateGraph(SectionState, output=SectionOutputState)
+
+# Define state keys to pass through from outer graph to inner graph
+section_builder.set_entry_point(
+    "generate_queries",
+    lambda state: {
+        "section": state["section"],
+        "sections": state["sections"],  # Pass through sections
+        "search_iterations": state.get("search_iterations", 0),
+        "search_queries": state.get("search_queries", []),
+        "source_str": state.get("source_str", ""),
+        "completed_sections": state.get("completed_sections", [])
+    }
+)
+
 section_builder.add_node("generate_queries", generate_queries)
 section_builder.add_node("search_web", search_web)
 section_builder.add_node("write_section", write_section)
 
 # Add edges for linear flow
-section_builder.add_edge(START, "generate_queries")
 section_builder.add_edge("generate_queries", "search_web")
 section_builder.add_edge("search_web", "write_section")
 section_builder.add_edge("write_section", END)
