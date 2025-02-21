@@ -10,6 +10,7 @@ import { ResearchStep, ResearchSource } from '../types/deep-research-types';
 
 export const DeepResearchTest = () => {
   const [query, setQuery] = useState('');
+  const [numSections, setNumSections] = useState(6);
   const { 
     isLoading, 
     error, 
@@ -22,7 +23,10 @@ export const DeepResearchTest = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await performResearch({ query });
+    await performResearch({ 
+      query,
+      number_of_main_sections: numSections
+    });
   };
 
   const handleFeedback = async (feedback: boolean) => {
@@ -40,6 +44,14 @@ export const DeepResearchTest = () => {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Enter your research query..."
             className="flex-1"
+          />
+          <Input
+            type="number"
+            min={1}
+            max={12}
+            value={numSections}
+            onChange={(e) => setNumSections(parseInt(e.target.value))}
+            className="w-24"
           />
           <Button type="submit" disabled={isLoading}>
             {isLoading ? 'Researching...' : 'Research'}

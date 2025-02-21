@@ -12,7 +12,7 @@ logger.info(f"Loading environment from: {env_path}")
 load_dotenv(env_path)
 
 # Validate environment variables before imports
-required_env_vars = ['TAVILY_API_KEY', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY']
+required_env_vars = ['TAVILY_API_KEY', 'OPENAI_API_KEY']
 missing_vars = [var for var in required_env_vars if not os.getenv(var)]
 if missing_vars:
     raise RuntimeError(f"Missing required environment variables: {', '.join(missing_vars)}")
@@ -36,7 +36,9 @@ from models import (
     Section,
     ResearchStep,
     ResearchSource,
-    ErrorEvent
+    ErrorEvent,
+    TextSection,
+    SectionContent
 )
 
 # Initialize FastAPI app
@@ -111,8 +113,41 @@ def process_event(event: Dict[str, Any], session_id: str) -> Dict[str, Any]:
                 session_id=session_id,
                 sections=[{
                     'title': section.name,
-                    'content': section.description
+                    'description': section.description,
+                    'subsection_titles': section.subsection_titles
                 } for section in plan_data['sections']]
+            ).model_dump()
+    
+    # Handle completed sections
+    if 'completed_sections' in event:
+        sections_data = event['completed_sections']
+        if isinstance(sections_data, list) and sections_data:
+            formatted_sections = []
+            for section in sections_data:
+                if hasattr(section, 'content') and isinstance(section.content, SectionContent):
+                    formatted_section = {
+                        'title': section.name,
+                        'description': section.description,
+                        'mainText': section.content.mainText,
+                        'subsections': [
+                            {
+                                'title': subsection.title,
+                                'description': subsection.description,
+                                'content': subsection.content,
+                                'sources': [
+                                    {'title': source.title, 'url': source.url}
+                                    for source in subsection.sources
+                                ]
+                            }
+                            for _, subsection in section.content.sections.items()
+                        ]
+                    }
+                    formatted_sections.append(formatted_section)
+            
+            return ProgressEvent(
+                type="progress",
+                session_id=session_id,
+                sections=formatted_sections
             ).model_dump()
     
     # Handle other progress events

@@ -53,6 +53,7 @@ export type ResearchEvent = InterruptEvent | ErrorEvent | ProgressEvent;
 
 export interface DeepResearchInput {
   query: string;
+  number_of_main_sections?: number;
   maxIterations?: number;
   context?: string;
 }
