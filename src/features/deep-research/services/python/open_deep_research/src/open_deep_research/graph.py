@@ -1,63 +1,138 @@
 from typing import Literal
-
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain.chat_models import init_chat_model
 from langchain_core.runnables import RunnableConfig
-
 from langgraph.constants import Send
 from langgraph.graph import START, END, StateGraph
 from langgraph.types import interrupt, Command
 
-from open_deep_research.state import ReportStateInput, ReportStateOutput, Sections, ReportState, SectionState, SectionOutputState, Queries
+from open_deep_research.state import ReportStateInput, ReportStateOutput, Sections, ReportState, SectionState, SectionOutputState, Queries, Section, TextSection, Source, SectionContent
 from open_deep_research.prompts import report_planner_query_writer_instructions, report_planner_instructions, query_writer_instructions, section_writer_instructions
 from open_deep_research.configuration import Configuration
 from open_deep_research.utils import tavily_search_async, deduplicate_and_format_sources, format_sections, perplexity_search
 
+import logging
+import json
+import os
+from datetime import datetime
+from pathlib import Path
+
+# Configure logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Create formatters and handlers
+formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(formatter)
+logger.addHandler(console_handler)
+
+# File handler - use absolute paths
+current_dir = Path(__file__).resolve().parent
+project_root = current_dir.parents[6]  # Go up to brainuniverse root
+log_dir = project_root / "src" / "features" / "deep-research" / "services" / "python" / "output_logs"
+log_dir.mkdir(parents=True, exist_ok=True)  # Create directory if it doesn't exist
+
+log_filename = f"deep_research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+log_path = log_dir / log_filename
+
+file_handler = logging.FileHandler(log_path)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+# Log the start of the session
+logger.info(f"Starting new research session. Log file: {log_path}")
+
 # Set writer model
-writer_model = init_chat_model(model=Configuration.writer_model, model_provider=Configuration.writer_provider.value) 
+writer_model = init_chat_model(model=Configuration.writer_model, model_provider=Configuration.writer_provider.value)
 
-# Nodes
+def parse_queries(text: str) -> list[str]:
+    """Parse search queries from text response"""
+    queries = []
+    for line in text.split('\n'):
+        line = line.strip()
+        if line and not line.startswith(('#', '-', '*', '1.', '2.', '3.', '4.', '5.')):
+            queries.append(line)
+    return queries
+
+def parse_section_content(text: str, subsection_titles: list[str]) -> SectionContent:
+    """Parse section content from JSON response"""
+    try:
+        response_data = json.loads(text)
+        
+        # Create subsections dictionary
+        subsections = {}
+        for subsection_data in response_data["subsections"]:
+            subsections[subsection_data["title"]] = TextSection(
+                title=subsection_data["title"],
+                description=subsection_data["description"],
+                content=subsection_data["content"],
+                sources=[
+                    Source(title=source["title"], url=source["url"])
+                    for source in subsection_data["sources"]
+                ]
+            )
+            
+        return SectionContent(
+            overview=response_data["overview"],
+            subsections=subsections
+        )
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON response: {e}")
+        raise
+    except KeyError as e:
+        logger.error(f"Missing required field in response: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Error processing response: {e}")
+        raise
+
 async def generate_report_plan(state: ReportState, config: RunnableConfig):
-    """ Generate the report plan """
-
-    # Inputs
+    """Generate the report plan"""
+    logger.info(f"\n{'='*80}\nGenerating Report Plan\n{'='*80}")
+    logger.info(f"Input state: {state}")
+    logger.info(f"Config: {config}")
+    
     topic = state["topic"]
-    number_of_main_sections = state.get("number_of_main_sections", 6)  # Default to 6 if not provided
-
-    # Get configuration
+    number_of_main_sections = state.get("number_of_main_sections", 6)
+    logger.info(f"Topic: {topic}")
+    logger.info(f"Number of sections: {number_of_main_sections}")
+    
     configurable = Configuration.from_runnable_config(config)
+    logger.info(f"Configuration: {configurable}")
     report_structure = configurable.report_structure
     number_of_queries = configurable.number_of_queries
 
-    # Convert JSON object to string if necessary
     if isinstance(report_structure, dict):
         report_structure = str(report_structure)
 
-    # Generate search query
-    structured_llm = writer_model.with_structured_output(Queries)
-
-    # Format system instructions
+    # Generate search queries
     system_instructions_query = report_planner_query_writer_instructions.format(
         topic=topic, 
         report_organization=report_structure, 
         number_of_queries=number_of_queries
     )
-
-    # Generate queries  
-    results = structured_llm.invoke([SystemMessage(content=system_instructions_query)]+[HumanMessage(content="Generate search queries that will help with planning the sections of the report.")])
+    logger.info(f"Query generation instructions: {system_instructions_query}")
+    
+    query_response = writer_model.invoke([
+        SystemMessage(content=system_instructions_query),
+        HumanMessage(content="Generate search queries that will help with planning the sections of the report.")
+    ])
+    logger.info(f"Query generation response: {query_response.content}")
+    
+    query_list = parse_queries(query_response.content)
+    logger.info(f"Parsed queries: {query_list}")
 
     # Web search
-    query_list = [query.search_query for query in results.queries]
-
-    # Handle both cases for search_api:
-    # 1. When selected in Studio UI -> returns a string (e.g. "tavily")
-    # 2. When using default -> returns an Enum (e.g. SearchAPI.TAVILY)
     if isinstance(configurable.search_api, str):
         search_api = configurable.search_api
     else:
         search_api = configurable.search_api.value
 
-    # Search the web
+    logger.info(f"Using search API: {search_api}")
     if search_api == "tavily":
         search_results = await tavily_search_async(query_list)
         source_str = deduplicate_and_format_sources(search_results, max_tokens_per_source=1000, include_raw_content=False)
@@ -66,45 +141,104 @@ async def generate_report_plan(state: ReportState, config: RunnableConfig):
         source_str = deduplicate_and_format_sources(search_results, max_tokens_per_source=1000, include_raw_content=False)
     else:
         raise ValueError(f"Unsupported search API: {configurable.search_api}")
+    
+    logger.info(f"Search results length: {len(source_str)}")
 
-    # Format system instructions
+    # Format system instructions for sections
     system_instructions_sections = report_planner_instructions.format(
         topic=topic, 
         report_organization=report_structure, 
         context=source_str,
         number_of_main_sections=number_of_main_sections
     )
+    logger.info(f"Section generation instructions: {system_instructions_sections}")
 
-    # Set the planner provider
+    # Set the planner provider and model
     if isinstance(configurable.planner_provider, str):
         planner_provider = configurable.planner_provider
     else:
         planner_provider = configurable.planner_provider.value
-
-    # Set the planner model
-    planner_llm = init_chat_model(model=Configuration.planner_model, model_provider=planner_provider)
     
-    # Generate sections 
-    structured_llm = planner_llm.with_structured_output(Sections)
-    report_sections = structured_llm.invoke([SystemMessage(content=system_instructions_sections)]+[HumanMessage(content="Generate the sections of the report. Your response must include a 'sections' field containing a list of sections. Each section must have: name, description, plan, research, and content fields.")])
+    planner_llm = init_chat_model(model=Configuration.planner_model, model_provider=planner_provider)
+    logger.info(f"Using planner: {planner_provider} with model {Configuration.planner_model}")
+    
+    # Generate sections
+    sections_response = planner_llm.invoke([
+        SystemMessage(content=system_instructions_sections),
+        HumanMessage(content="Generate the sections of the report.")
+    ])
+    logger.info(f"Section generation response: {sections_response.content}")
+    
+    # Parse JSON response
+    try:
+        response_data = json.loads(sections_response.content)
+        sections = []
+        
+        for section_data in response_data["sections"]:
+            section = Section(
+                name=section_data["name"],
+                description=section_data["description"],
+                research=True,
+                content="",
+                subsection_titles=section_data["subsection_titles"]
+            )
+            sections.append(section)
+            logger.info(f"Added section: {section}")
+            
+        logger.info(f"Total sections generated: {len(sections)}")
+        
+        # If no sections were generated, return an error
+        if not sections:
+            logger.error("No sections were generated")
+            return Command(
+                update={"error": "No sections were generated. Please try again with a different query."},
+                goto=END
+            )
 
-    # Get sections
-    sections = report_sections.sections
-
-    return {"sections": sections}
+        # Initialize the first section for processing
+        initial_state = {
+            "sections": sections,
+            "section": sections[0],
+            "search_iterations": 0,
+            "search_queries": [],
+            "source_str": "",
+            "report_sections_from_research": "",
+            "completed_sections": []
+        }
+        logger.info(f"Returning initial state: {initial_state}")
+        return Command(
+            update=initial_state,
+            goto="build_section_with_web_research"
+        )
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON response: {e}")
+        return Command(
+            update={"error": f"Failed to parse response: {str(e)}. Please try again."},
+            goto=END
+        )
+    except KeyError as e:
+        logger.error(f"Missing required field in response: {e}")
+        return Command(
+            update={"error": f"Invalid response format - missing field: {str(e)}. Please try again."},
+            goto=END
+        )
+    except Exception as e:
+        logger.error(f"Error processing response: {e}")
+        return Command(
+            update={"error": f"Error processing response: {str(e)}. Please try again."},
+            goto=END
+        )
 
 def generate_queries(state: SectionState, config: RunnableConfig):
-    """ Generate search queries for a report section """
-
-    # Get state 
+    """Generate search queries for a report section"""
+    logger.info(f"\n{'='*80}\nGenerating Queries\n{'='*80}")
+    logger.info(f"Input state: {state}")
+    logger.info(f"Config: {config}")
+    
     section = state["section"]
-
-    # Get configuration
     configurable = Configuration.from_runnable_config(config)
     number_of_queries = configurable.number_of_queries
-
-    # Generate queries 
-    structured_llm = writer_model.with_structured_output(Queries)
 
     # Format system instructions
     system_instructions = query_writer_instructions.format(
@@ -112,33 +246,38 @@ def generate_queries(state: SectionState, config: RunnableConfig):
         number_of_queries=number_of_queries,
         subsection_titles="\n".join(section.subsection_titles)
     )
+    logger.info(f"Query generation instructions: {system_instructions}")
 
-    # Generate queries  
-    queries = structured_llm.invoke([SystemMessage(content=system_instructions)]+[HumanMessage(content="Generate search queries on the provided topic.")])
+    # Generate queries
+    query_response = writer_model.invoke([
+        SystemMessage(content=system_instructions),
+        HumanMessage(content="Generate search queries on the provided topic.")
+    ])
+    logger.info(f"Query generation response: {query_response.content}")
+    
+    query_list = parse_queries(query_response.content)
+    queries = [{"search_query": q} for q in query_list]
+    logger.info(f"Generated queries: {queries}")
 
-    return {"search_queries": queries.queries}
+    return {"search_queries": queries}
 
 async def search_web(state: SectionState, config: RunnableConfig):
-    """ Search the web for each query, then return a list of raw sources and a formatted string of sources."""
+    """Search the web for each query"""
+    logger.info(f"\n{'='*80}\nSearching Web\n{'='*80}")
+    logger.info(f"Input state: {state}")
+    logger.info(f"Config: {config}")
     
-    # Get state 
     search_queries = state["search_queries"]
-
-    # Get configuration
     configurable = Configuration.from_runnable_config(config)
-
-    # Web search
-    query_list = [query.search_query for query in search_queries]
+    query_list = [query["search_query"] for query in search_queries]
+    logger.info(f"Search queries: {query_list}")
     
-    # Handle both cases for search_api:
-    # 1. When selected in Studio UI -> returns a string (e.g. "tavily")
-    # 2. When using default -> returns an Enum (e.g. SearchAPI.TAVILY)
     if isinstance(configurable.search_api, str):
         search_api = configurable.search_api
     else:
         search_api = configurable.search_api.value
 
-    # Search the web
+    logger.info(f"Using search API: {search_api}")
     if search_api == "tavily":
         search_results = await tavily_search_async(query_list)
         source_str = deduplicate_and_format_sources(search_results, max_tokens_per_source=5000, include_raw_content=True)
@@ -148,16 +287,17 @@ async def search_web(state: SectionState, config: RunnableConfig):
     else:
         raise ValueError(f"Unsupported search API: {configurable.search_api}")
 
+    logger.info(f"Search results length: {len(source_str)}")
     return {"source_str": source_str, "search_iterations": state["search_iterations"] + 1}
 
-def write_section(state: SectionState, config: RunnableConfig) -> Command[Literal[END,"search_web"]]:
-    """ Write a section of the report """
-
-    # Get state 
+def write_section(state: SectionState, config: RunnableConfig) -> Command[Literal[END]]:
+    """Write a section of the report"""
+    logger.info(f"\n{'='*80}\nWriting Section\n{'='*80}")
+    logger.info(f"Input state: {state}")
+    logger.info(f"Config: {config}")
+    
     section = state["section"]
     source_str = state["source_str"]
-
-    # Get configuration
     configurable = Configuration.from_runnable_config(config)
 
     # Format system instructions
@@ -165,48 +305,37 @@ def write_section(state: SectionState, config: RunnableConfig) -> Command[Litera
         section_title=section.name, 
         section_topic=section.description, 
         context=source_str, 
-        section_content=section.content.json() if section.content else "",
+        section_content=section.content if section.content else "",
         subsection_titles="\n".join(section.subsection_titles)
     )
+    logger.info(f"Section writing instructions: {system_instructions}")
 
-    # Generate section  
-    section_content = writer_model.invoke([SystemMessage(content=system_instructions)]+[HumanMessage(content="Generate a report section based on the provided sources.")])
+    # Generate section
+    section_response = writer_model.invoke([
+        SystemMessage(content=system_instructions),
+        HumanMessage(content="Generate a report section based on the provided sources.")
+    ])
+    logger.info(f"Section generation response: {section_response.content}")
     
     # Parse the content into SectionContent model
     try:
-        content_dict = section_content.content
-        if isinstance(content_dict, str):
-            import json
-            content_dict = json.loads(content_dict)
-        section.content = SectionContent(**content_dict)
+        section.content = parse_section_content(section_response.content, section.subsection_titles)
+        logger.info(f"Parsed section content: {section.content}")
     except Exception as e:
-        print(f"Error parsing section content: {e}")
-        # If parsing fails, store raw content and let feedback handle it
-        section.content = section_content.content
+        logger.error(f"Error parsing section content: {e}", exc_info=True)
+        section.content = section_response.content
 
-    # Since we're using a structured format now, we can consider the section complete
-    # if we have all required subsections
-    if (isinstance(section.content, SectionContent) and 
-        len(section.content.sections) == len(section.subsection_titles)):
-        return Command(
-            update={"completed_sections": [section]},
-            goto=END
-        )
-    else:
-        # If we don't have all subsections, do another search iteration
-        return Command(
-            update={"search_queries": [
-                SearchQuery(search_query=f"detailed information about {title}")
-                for title in section.subsection_titles
-                if title not in (section.content.sections if isinstance(section.content, SectionContent) else {})
-            ], "section": section},
-            goto="search_web"
-        )
-    
+    # Always end after writing
+    return Command(
+        update={"completed_sections": [section]},
+        goto=END
+    )
+
 def write_final_sections(state: SectionState):
-    """ Write final sections of the report, which do not require web search and use the completed sections as context """
-
-    # Get state 
+    """Write final sections of the report"""
+    logger.info(f"\n{'='*80}\nWriting Final Sections\n{'='*80}")
+    logger.info(f"Input state: {state}")
+    
     section = state["section"]
     completed_report_sections = state["report_sections_from_research"]
     
@@ -215,63 +344,63 @@ def write_final_sections(state: SectionState):
         section_title=section.name, 
         section_topic=section.description, 
         context=completed_report_sections,
-        section_content=section.content.json() if section.content else "",
+        section_content=section.content if section.content else "",
         subsection_titles="\n".join(section.subsection_titles)
     )
+    logger.info(f"Final section writing instructions: {system_instructions}")
 
-    # Generate section  
-    section_content = writer_model.invoke([SystemMessage(content=system_instructions)]+[HumanMessage(content="Generate a report section based on the provided sources.")])
+    # Generate section
+    section_response = writer_model.invoke([
+        SystemMessage(content=system_instructions),
+        HumanMessage(content="Generate a report section based on the provided sources.")
+    ])
+    logger.info(f"Final section generation response: {section_response.content}")
     
     # Parse the content into SectionContent model
     try:
-        content_dict = section_content.content
-        if isinstance(content_dict, str):
-            import json
-            content_dict = json.loads(content_dict)
-        section.content = SectionContent(**content_dict)
+        section.content = parse_section_content(section_response.content, section.subsection_titles)
+        logger.info(f"Parsed final section content: {section.content}")
     except Exception as e:
-        print(f"Error parsing section content: {e}")
-        # If parsing fails, store raw content and let feedback handle it
-        section.content = section_content.content
+        logger.error(f"Error parsing final section content: {e}", exc_info=True)
+        section.content = section_response.content
 
-    # Write the updated section to completed sections
     return {"completed_sections": [section]}
 
 def gather_completed_sections(state: ReportState):
-    """ Gather completed sections from research and format them as context for writing the final sections """    
-
-    # List of completed sections
+    """Gather completed sections from research"""
+    logger.info(f"\n{'='*80}\nGathering Completed Sections\n{'='*80}")
+    logger.info(f"Input state: {state}")
+    
     completed_sections = state["completed_sections"]
-
-    # Format completed section to str to use as context for final sections
     completed_report_sections = format_sections(completed_sections)
-
+    logger.info(f"Formatted sections length: {len(completed_report_sections)}")
     return {"report_sections_from_research": completed_report_sections}
 
-# Report section sub-graph -- 
-
-# Add nodes 
+# Report section sub-graph
 section_builder = StateGraph(SectionState, output=SectionOutputState)
 section_builder.add_node("generate_queries", generate_queries)
 section_builder.add_node("search_web", search_web)
 section_builder.add_node("write_section", write_section)
 
-# Add edges
+# Add edges for linear flow
 section_builder.add_edge(START, "generate_queries")
 section_builder.add_edge("generate_queries", "search_web")
 section_builder.add_edge("search_web", "write_section")
+section_builder.add_edge("write_section", END)
 
-# Outer graph -- 
-
-# Add nodes
+# Outer graph
 builder = StateGraph(ReportState, input=ReportStateInput, output=ReportStateOutput, config_schema=Configuration)
 builder.add_node("generate_report_plan", generate_report_plan)
 builder.add_node("build_section_with_web_research", section_builder.compile())
 builder.add_node("gather_completed_sections", gather_completed_sections)
 
-# Add edges
+# Add edges with proper state handling
 builder.add_edge(START, "generate_report_plan")
-builder.add_edge("generate_report_plan", "build_section_with_web_research")
+builder.add_conditional_edges(
+    "generate_report_plan",
+    lambda x: END if "error" in x else "build_section_with_web_research"
+)
 builder.add_edge("build_section_with_web_research", "gather_completed_sections")
+builder.add_edge("gather_completed_sections", END)
 
 graph = builder.compile()

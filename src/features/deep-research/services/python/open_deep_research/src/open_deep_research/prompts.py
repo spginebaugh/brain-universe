@@ -21,19 +21,7 @@ Make the queries specific enough to find high-quality, relevant sources while co
 </Task>"""
 
 # Prompt to generate the learning roadmap plan
-report_planner_instructions="""I want a plan for a learning roadmap. 
-
-<Task>
-Generate a list of {number_of_main_sections} main sections for the learning roadmap.
-
-Each main section should have the fields:
-
-- Name - Name for this section of the learning roadmap.
-- Description - Brief overview of the main topics covered in this section.
-- Subsection_titles - A list of 6 titles for subsections for this main section.
-- Content - The content of the section, which you will leave blank for now.
-
-</Task>
+report_planner_instructions="""You are an expert technical writer, helping to plan a learning roadmap.
 
 <Topic>
 The topic of the learning roadmap is:
@@ -49,7 +37,57 @@ The learning roadmap should follow this organization:
 Here is context to use to plan the sections of the learning roadmap: 
 {context}
 </Context>
-"""
+
+<Task>
+Generate a list of {number_of_main_sections} main sections for the learning roadmap.
+
+You must output your response in JSON format that matches this schema exactly:
+
+{{
+  "type": "object",
+  "properties": {{
+    "sections": {{
+      "type": "array",
+      "description": "Array of sections for the learning roadmap",
+      "items": {{
+        "type": "object",
+        "properties": {{
+          "number": {{
+            "type": "integer",
+            "description": "Section number"
+          }},
+          "name": {{
+            "type": "string",
+            "description": "Section name"
+          }},
+          "description": {{
+            "type": "string",
+            "description": "Brief overview of the main topics covered in this section"
+          }},
+          "subsection_titles": {{
+            "type": "array",
+            "description": "List of exactly 6 subsection titles",
+            "items": {{
+              "type": "string"
+            }},
+            "minItems": 6,
+            "maxItems": 6
+          }}
+        }},
+        "required": ["number", "name", "description", "subsection_titles"]
+      }}
+    }}
+  }},
+  "required": ["sections"]
+}}
+
+Requirements:
+1. Each section must have exactly 6 subsection titles
+2. Section numbers must start at 1 and increment by 1
+3. Section descriptions should be clear and concise
+4. Subsection titles should logically break down the section topic
+5. The output must be valid JSON that exactly matches the schema
+</Task>"""
 
 # Query writer instructions
 query_writer_instructions="""You are an expert technical teacher crafting targeted web search queries that will gather comprehensive information for writing a detailed lesson for a section of a learning roadmap.
@@ -97,66 +135,78 @@ section_writer_instructions = """You are an expert technical teacher crafting a 
 {context}
 </Source material>
 
-<Guidelines for writing>
-1. If the existing section content is not populated, write a new section from scratch.
-2. If the existing section content is populated, write a new section that synthesizes the existing section content with the new information.
-3. Structure your response in JSON format as follows:
-```json
-{
-  "mainText": "Brief overview of the entire section (100-150 words)",
-  "sections": {
-    "subsection1": {
-      "title": "First Subsection Title",
-      "description": "Brief overview of the topics covered in this subsection",
-      "content": "Detailed content for first subsection (150-200 words)"
-      "sources": [
-        {
-          "title": "Source Title",
-          "url": "Source URL"
-        }
-      ]
-    },
-    "subsection2": {
-      "title": "Second Subsection Title",
-      "description": "Brief overview of the topics covered in this subsection",
-      "content": "Detailed content for second subsection (150-200 words)",
-      "sources": [
-        {
-          "title": "Source Title",
-          "url": "Source URL"
-        }
-      ]
-    },
-    // ... repeat for all 6 subsections
-  }
-}
-```
-4. Each subsection's content should be self-contained and comprehensive.
-</Guidelines for writing>
+<Task>
+Write a comprehensive section with an overview and 6 detailed subsections based on the provided information.
 
-<Content style>
-For both mainText and each subsection's content:
-- No marketing language
-- Technical focus
-- Write in simple, clear language
-- Start each section with the most important insight in **bold**
-- Use short paragraphs (2-3 sentences max)
-- You may include ONE structural element per section IF it helps clarify your point:
-  * Either a focused table comparing 2-3 key items (using Markdown table syntax)
-  * Or a short list (3-5 items) using proper Markdown list syntax:
-    - Use `*` or `-` for unordered lists
-    - Use `1.` for ordered lists
-    - Ensure proper indentation and spacing
-</Content style>
+You must output your response in JSON format that matches this schema exactly:
 
+{{
+  "type": "object",
+  "properties": {{
+    "overview": {{
+      "type": "string",
+      "description": "A 100-150 word overview of the entire section"
+    }},
+    "subsections": {{
+      "type": "array",
+      "description": "Array of exactly 6 subsections",
+      "items": {{
+        "type": "object",
+        "properties": {{
+          "title": {{
+            "type": "string",
+            "description": "Title of the subsection"
+          }},
+          "description": {{
+            "type": "string",
+            "description": "Brief overview of the topics covered in this subsection"
+          }},
+          "content": {{
+            "type": "string",
+            "description": "Detailed content for subsection (150-200 words)"
+          }},
+          "sources": {{
+            "type": "array",
+            "description": "List of sources used in this subsection",
+            "items": {{
+              "type": "object",
+              "properties": {{
+                "title": {{
+                  "type": "string",
+                  "description": "Title of the source"
+                }},
+                "url": {{
+                  "type": "string",
+                  "description": "URL of the source"
+                }}
+              }},
+              "required": ["title", "url"]
+            }}
+          }}
+        }},
+        "required": ["title", "description", "content", "sources"]
+      }},
+      "minItems": 6,
+      "maxItems": 6
+    }}
+  }},
+  "required": ["overview", "subsections"]
+}}
 
-<Quality checks>
-- mainText provides a clear overview (100-150 words)
-- Each subsection is comprehensive (150-200 words)
-- Each section starts with a bold insight
-- Content is technically accurate and well-structured
-- All subsections from the provided titles are included
-- Sources are properly cited for each subsection
-- JSON structure is valid and matches the template exactly
-</Quality checks>
-"""
+Requirements:
+1. Overview must be 100-150 words and provide a clear summary of the section
+2. Each subsection must include:
+   - A clear title matching one from the provided subsection titles
+   - A brief description of the topics covered
+   - Detailed content (150-200 words)
+   - At least one relevant source with title and URL
+3. Content should be:
+   - Technical and accurate
+   - Written in simple, clear language
+   - Start with the most important insight in **bold**
+   - Use short paragraphs (2-3 sentences max)
+4. You may include ONE structural element per subsection:
+   - Either a focused table comparing 2-3 key items
+   - Or a short list (3-5 items)
+5. The output must be valid JSON that exactly matches the schema
+</Task>"""

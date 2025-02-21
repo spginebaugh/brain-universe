@@ -4,7 +4,13 @@ from dotenv import load_dotenv
 from typing import Dict, Any
 
 # Configure logging and load environment variables first
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
 logger = logging.getLogger(__name__)
 
 env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -26,6 +32,7 @@ import uuid
 from langgraph.checkpoint.memory import MemorySaver
 from open_deep_research.graph import builder
 from langgraph.types import Command
+from open_deep_research.state import CustomJSONEncoder
 
 # Import our Pydantic models
 from models import (
@@ -87,119 +94,272 @@ session_store = SessionStore()
 
 def process_event(event: Dict[str, Any], session_id: str) -> Dict[str, Any]:
     """Process and format events from the graph for client consumption."""
-    logger.info(f"Processing raw event: {event}")
+    logger.info(f"\n{'='*80}\nProcessing Event\n{'='*80}")
+    logger.info(f"Raw event data: {json.dumps(event, indent=2, cls=CustomJSONEncoder)}")
     
-    # Handle interrupt events
-    if '__interrupt__' in event:
-        interrupt_data = event['__interrupt__']
-        if isinstance(interrupt_data, tuple):
-            # Extract interrupt value and other properties
-            value = interrupt_data[0].value if hasattr(interrupt_data[0], 'value') else str(interrupt_data)
-            resumable = interrupt_data[0].resumable if hasattr(interrupt_data[0], 'resumable') else True
-            return InterruptEvent(
-                type="interrupt",
-                session_id=session_id,
-                value=value,
-                resumable=resumable,
-                requires_feedback=True
-            ).model_dump()
+    # Create base progress event
+    progress_event = ProgressEvent(
+        type="progress",
+        session_id=session_id,
+        content=None,
+        sections=[],
+        steps=[]
+    )
+    logger.info(f"Created base progress event: {progress_event.model_dump_json(indent=2)}")
     
-    # Handle generate_report_plan events
-    if 'generate_report_plan' in event:
-        plan_data = event['generate_report_plan']
-        if 'sections' in plan_data:
-            return ProgressEvent(
-                type="progress",
+    try:
+        # Handle error events first
+        if isinstance(event, dict) and "error" in event:
+            error_event = ErrorEvent(
+                type="error",
                 session_id=session_id,
-                sections=[{
+                error=event["error"]
+            )
+            logger.info(f"Generated error event: {error_event.model_dump_json(indent=2)}")
+            return error_event.model_dump()
+        
+        # Handle interrupt events
+        if '__interrupt__' in event:
+            interrupt_data = event['__interrupt__']
+            logger.info(f"Processing interrupt data: {interrupt_data}")
+            if isinstance(interrupt_data, tuple):
+                value = interrupt_data[0].value if hasattr(interrupt_data[0], 'value') else str(interrupt_data)
+                resumable = interrupt_data[0].resumable if hasattr(interrupt_data[0], 'resumable') else True
+                interrupt_event = InterruptEvent(
+                    type="interrupt",
+                    session_id=session_id,
+                    value=value,
+                    resumable=resumable,
+                    requires_feedback=True
+                )
+                logger.info(f"Generated interrupt event: {interrupt_event.model_dump_json(indent=2)}")
+                return interrupt_event.model_dump()
+        
+        # Handle generate_report_plan events
+        if isinstance(event, dict) and 'sections' in event:
+            logger.info("Processing sections event")
+            sections = event['sections']
+            logger.info(f"Number of sections: {len(sections)}")
+            
+            if not sections:
+                error_event = ErrorEvent(
+                    type="error",
+                    session_id=session_id,
+                    error="No sections were generated. Please try again with a different query."
+                )
+                logger.info(f"Generated error event for empty sections: {error_event.model_dump_json(indent=2)}")
+                return error_event.model_dump()
+            
+            # Add step information
+            progress_event.steps = [{
+                "agentName": "Report Planner",
+                "thought": "Generated initial report structure",
+                "action": "Planning sections",
+                "observation": f"Created {len(sections)} sections"
+            }]
+            
+            # Convert sections to dict format
+            progress_event.sections = []
+            for section in sections:
+                logger.info(f"Processing section: {section}")
+                section_dict = {
                     'title': section.name,
                     'description': section.description,
                     'subsection_titles': section.subsection_titles
-                } for section in plan_data['sections']]
-            ).model_dump()
-    
-    # Handle completed sections
-    if 'completed_sections' in event:
-        sections_data = event['completed_sections']
-        if isinstance(sections_data, list) and sections_data:
-            formatted_sections = []
-            for section in sections_data:
-                if hasattr(section, 'content') and isinstance(section.content, SectionContent):
-                    formatted_section = {
-                        'title': section.name,
-                        'description': section.description,
-                        'mainText': section.content.mainText,
-                        'subsections': [
-                            {
-                                'title': subsection.title,
-                                'description': subsection.description,
-                                'content': subsection.content,
-                                'sources': [
-                                    {'title': source.title, 'url': source.url}
-                                    for source in subsection.sources
-                                ]
+                }
+                if section.content:
+                    if isinstance(section.content, str):
+                        section_dict['content'] = section.content
+                    else:
+                        section_dict['content'] = {
+                            'overview': section.content.overview,
+                            'subsections': {
+                                k: {
+                                    'title': v.title,
+                                    'description': v.description,
+                                    'content': v.content,
+                                    'sources': [{'title': s.title, 'url': s.url} for s in v.sources]
+                                } for k, v in section.content.subsections.items()
                             }
-                            for _, subsection in section.content.sections.items()
-                        ]
-                    }
-                    formatted_sections.append(formatted_section)
+                        }
+                progress_event.sections.append(section_dict)
+                logger.info(f"Converted section to: {json.dumps(section_dict, indent=2)}")
             
-            return ProgressEvent(
-                type="progress",
-                session_id=session_id,
-                sections=formatted_sections
-            ).model_dump()
-    
-    # Handle other progress events
-    return ProgressEvent(
-        type="progress",
-        session_id=session_id,
-        content=str(event) if event else None
-    ).model_dump()
+            logger.info(f"Final progress event: {progress_event.model_dump_json(indent=2)}")
+            return progress_event.model_dump()
+        
+        # Handle search events
+        if isinstance(event, dict) and 'source_str' in event:
+            logger.info("Processing search event")
+            logger.info(f"Source string length: {len(event['source_str'])}")
+            progress_event.steps = [{
+                "agentName": "Web Researcher",
+                "thought": "Searching for information",
+                "action": "Web search",
+                "observation": "Found relevant sources"
+            }]
+            logger.info(f"Generated search progress event: {progress_event.model_dump_json(indent=2)}")
+            return progress_event.model_dump()
+        
+        # Handle section processing events
+        if isinstance(event, dict) and 'section' in event:
+            logger.info("Processing section event")
+            section = event['section']
+            logger.info(f"Section data: {section}")
+            
+            progress_event.steps = [{
+                "agentName": "Section Writer",
+                "thought": f"Processing section: {section.name}",
+                "action": "Writing content",
+                "observation": "Generated section content"
+            }]
+            
+            # Convert section to dict format
+            section_dict = {
+                'title': section.name,
+                'description': section.description,
+                'subsection_titles': section.subsection_titles
+            }
+            if section.content:
+                if isinstance(section.content, str):
+                    section_dict['content'] = section.content
+                else:
+                    section_dict['content'] = {
+                        'overview': section.content.overview,
+                        'subsections': {
+                            k: {
+                                'title': v.title,
+                                'description': v.description,
+                                'content': v.content,
+                                'sources': [{'title': s.title, 'url': s.url} for s in v.sources]
+                            } for k, v in section.content.subsections.items()
+                        }
+                    }
+            progress_event.sections = [section_dict]
+            logger.info(f"Generated section progress event: {progress_event.model_dump_json(indent=2)}")
+            return progress_event.model_dump()
+        
+        # Handle completed sections
+        if isinstance(event, dict) and 'completed_sections' in event:
+            logger.info("Processing completed sections event")
+            sections = event['completed_sections']
+            logger.info(f"Number of completed sections: {len(sections)}")
+            progress_event.steps = [{
+                "agentName": "Report Assembler",
+                "thought": "Finalizing report sections",
+                "action": "Assembling content",
+                "observation": f"Completed {len(sections)} sections"
+            }]
+            logger.info(f"Generated completion progress event: {progress_event.model_dump_json(indent=2)}")
+            return progress_event.model_dump()
+        
+        # Default progress event
+        logger.info("Generating default progress event")
+        progress_event.content = str(event) if event else None
+        logger.info(f"Default progress event: {progress_event.model_dump_json(indent=2)}")
+        return progress_event.model_dump()
+        
+    except Exception as e:
+        logger.error(f"Error processing event: {str(e)}", exc_info=True)
+        error_event = ErrorEvent(
+            type="error",
+            session_id=session_id,
+            error=f"Error processing event: {str(e)}"
+        )
+        logger.info(f"Generated error event: {error_event.model_dump_json(indent=2)}")
+        return error_event.model_dump()
+
+def event_to_dict(event: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert event to JSON-serializable dictionary."""
+    if not isinstance(event, dict):
+        return {"error": str(event)}
+        
+    result = {}
+    for key, value in event.items():
+        if isinstance(value, (list, tuple)):
+            result[key] = [item.to_json() if hasattr(item, 'to_json') else str(item) for item in value]
+        elif hasattr(value, 'to_json'):
+            result[key] = value.to_json()
+        elif isinstance(value, dict):
+            result[key] = event_to_dict(value)
+        else:
+            result[key] = str(value)
+    return result
 
 @app.post("/api/research")
 async def research(request: ResearchRequest):
     try:
         session_id = str(uuid.uuid4())
-        logger.info(f"Starting research for query: {request.query} with session: {session_id}")
+        logger.info(f"\n{'='*80}\nStarting Research Session: {session_id}\n{'='*80}")
+        logger.info(f"Request data: {request.model_dump_json(indent=2)}")
+        
         session = session_store.create_session(session_id)
+        logger.info(f"Created session with config: {json.dumps(session['thread'], indent=2)}")
         
         async def event_generator():
             try:
-                logger.info("Starting event stream")
+                logger.info(f"\n{'='*80}\nStarting Event Stream\n{'='*80}")
+                # Initialize the full state with all required fields
+                initial_state = {
+                    "topic": request.query,
+                    "number_of_main_sections": request.number_of_main_sections if hasattr(request, 'number_of_main_sections') else 6,
+                    "sections": [],
+                    "section": None,  # Initialize section as None
+                    "search_iterations": 0,
+                    "search_queries": [],
+                    "source_str": "",
+                    "completed_sections": [],
+                    "report_sections_from_research": ""
+                }
+                logger.info(f"Initial state: {json.dumps(initial_state, indent=2)}")
+                
                 async for event in session["graph"].astream(
-                    {"topic": request.query},
+                    initial_state,
                     session["thread"]
                 ):
-                    logger.info(f"Received event: {event}")
-                    if isinstance(event, dict):
-                        try:
-                            # Process the event using our helper function
-                            processed_event = process_event(event, session_id)
-                            event_json = json.dumps(processed_event)
-                            logger.info(f"Sending event: {event_json}")
-                            yield f"data: {event_json}\n\n"
-                        except Exception as e:
-                            logger.error(f"Error processing event {event}: {str(e)}")
+                    try:
+                        # Convert event to JSON-serializable dict
+                        event_dict = event_to_dict(event)
+                        logger.info(f"\n{'-'*80}\nReceived graph event: {json.dumps(event_dict, indent=2)}")
+                        
+                        if isinstance(event, dict):
+                            try:
+                                processed_event = process_event(event, session_id)
+                                event_json = json.dumps(processed_event)
+                                logger.info(f"Sending processed event: {event_json}")
+                                yield f"data: {event_json}\n\n"
+                            except Exception as e:
+                                logger.error(f"Error processing event: {str(e)}", exc_info=True)
+                                error_event = ErrorEvent(
+                                    type="error",
+                                    session_id=session_id,
+                                    error=f"Error processing event: {str(e)}"
+                                )
+                                error_json = error_event.model_dump_json()
+                                logger.info(f"Sending error event: {error_json}")
+                                yield f"data: {error_json}\n\n"
+                        else:
+                            logger.warning(f"Received non-dict event: {event}")
                             error_event = ErrorEvent(
                                 type="error",
                                 session_id=session_id,
-                                error=f"Error processing event: {str(e)}"
+                                error="Invalid event format"
                             )
-                            yield f"data: {error_event.model_dump_json()}\n\n"
-                    else:
-                        logger.warning(f"Received non-dict event: {event}")
-                        error_event = ErrorEvent(
-                            type="error",
-                            session_id=session_id,
-                            error="Invalid event format"
-                        )
-                        yield f"data: {error_event.model_dump_json()}\n\n"
+                            error_json = error_event.model_dump_json()
+                            logger.info(f"Sending error event: {error_json}")
+                            yield f"data: {error_json}\n\n"
+                    except Exception as e:
+                        logger.error(f"Error in event processing: {str(e)}", exc_info=True)
+                        error_json = json.dumps({'error': str(e)})
+                        logger.info(f"Sending error: {error_json}")
+                        yield f"data: {error_json}\n\n"
             except Exception as e:
-                logger.error(f"Error in event stream: {str(e)}")
-                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                logger.error(f"Error in event stream: {str(e)}", exc_info=True)
+                error_json = json.dumps({'error': str(e)})
+                logger.info(f"Sending error: {error_json}")
+                yield f"data: {error_json}\n\n"
             finally:
-                logger.info("Event stream completed")
+                logger.info(f"\n{'='*80}\nEvent Stream Completed\n{'='*80}")
                 yield "data: [DONE]\n\n"
 
         return StreamingResponse(

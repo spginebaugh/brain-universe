@@ -2,8 +2,8 @@ from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel, Field
 
 class ResearchRequest(BaseModel):
-    query: str
-    number_of_main_sections: int = Field(default=6, description="Number of main sections to generate")
+    query: str = Field(description="The research query")
+    number_of_main_sections: Optional[int] = Field(default=6, description="Number of main sections to generate")
 
 class FeedbackRequest(BaseModel):
     session_id: str
@@ -20,15 +20,18 @@ class TextSection(BaseModel):
     sources: List[Source]
 
 class SectionContent(BaseModel):
-    mainText: str
-    sections: Dict[str, TextSection]
+    overview: str = ""
+    subsections: Dict[str, TextSection] = Field(default_factory=dict)
 
 class Section(BaseModel):
     name: str
     description: str
     research: bool = True
-    content: Optional[SectionContent] = None
+    content: Union[str, SectionContent, None] = ""
     subsection_titles: List[str] = Field(default_factory=list)
+
+    class Config:
+        arbitrary_types_allowed = True
 
 class Sections(BaseModel):
     sections: List[Section] = Field(description="Sections of the report.")
@@ -51,7 +54,8 @@ class BaseEvent(BaseModel):
 class ProgressEvent(BaseEvent):
     type: str = "progress"
     content: Optional[str] = None
-    sections: Optional[List[Section]] = None
+    sections: Optional[List[Dict[str, Any]]] = None
+    steps: Optional[List[ResearchStep]] = None
 
 class InterruptEvent(BaseEvent):
     type: str = "interrupt"
