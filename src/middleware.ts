@@ -25,5 +25,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: [...protectedPaths, ...authPaths],
+  matcher: ['/graph-workspace', '/graph-workspace/*', '/sign-in', '/sign-up']
 }; 
