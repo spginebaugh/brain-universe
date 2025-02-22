@@ -31,36 +31,73 @@ logger.addHandler(console_handler)
 
 # File handler - use absolute paths
 current_dir = Path(__file__).resolve().parent
-project_root = current_dir.parents[6]  # Go up to brainuniverse root
-log_dir = project_root / "src" / "features" / "deep-research" / "services" / "python" / "output_logs"
-log_dir.mkdir(parents=True, exist_ok=True)  # Create directory if it doesn't exist
+project_root = current_dir.parents[5]  # Go up to brainuniverse root
+log_dir = project_root / "features" / "deep-research" / "services" / "python" / "output_logs"
 
-log_filename = f"deep_research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-log_path = log_dir / log_filename
-
-file_handler = logging.FileHandler(log_path)
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-
-# Log the start of the session
-logger.info(f"Starting new research session. Log file: {log_path}")
+try:
+    # Create log directory if it doesn't exist
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Generate log filename with timestamp
+    log_filename = f"deep_research_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    log_path = log_dir / log_filename
+    
+    # Create and add file handler
+    file_handler = logging.FileHandler(log_path)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
+    # Log the start of the session and log file location
+    logger.info(f"Starting new research session")
+    logger.info(f"Log file created at: {log_path}")
+    
+except Exception as e:
+    logger.error(f"Failed to setup file logging: {e}")
+    logger.info("Continuing with console logging only")
 
 # Set writer model
 writer_model = init_chat_model(model=Configuration.writer_model, model_provider=Configuration.writer_provider.value)
 
 def parse_queries(text: str) -> list[str]:
-    """Parse search queries from text response"""
-    queries = []
-    for line in text.split('\n'):
-        line = line.strip()
-        if line and not line.startswith(('#', '-', '*', '1.', '2.', '3.', '4.', '5.')):
-            queries.append(line)
-    return queries
+    """Parse search queries from JSON response"""
+    try:
+        response_data = json.loads(text)
+        queries = []
+        for query_data in response_data["queries"]:
+            queries.append(query_data["query"])
+        return queries
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON response: {e}")
+        # Fallback to old parsing method for backward compatibility
+        queries = []
+        for line in text.split('\n'):
+            line = line.strip()
+            if line and not line.startswith(('#', '-', '*', '1.', '2.', '3.', '4.', '5.')):
+                queries.append(line)
+        return queries
+    except KeyError as e:
+        logger.error(f"Missing required field in response: {e}")
+        raise
+    except Exception as e:
+        logger.error(f"Error processing response: {e}")
+        raise
 
 def parse_section_content(text: str, subsection_titles: list[str]) -> SectionContent:
     """Parse section content from JSON response"""
     try:
-        response_data = json.loads(text)
+        # Clean the text of any control characters
+        cleaned_text = "".join(char for char in text if char.isprintable() or char in ['\n', '\t', ' '])
+        
+        # Try to find JSON content if it's embedded in other text
+        try:
+            start_idx = cleaned_text.index('{')
+            end_idx = cleaned_text.rindex('}') + 1
+            cleaned_text = cleaned_text[start_idx:end_idx]
+        except ValueError:
+            logger.warning("Could not find JSON markers in response, using full text")
+        
+        logger.debug(f"Attempting to parse JSON: {cleaned_text}")
+        response_data = json.loads(cleaned_text)
         
         # Create subsections dictionary
         subsections = {}
@@ -82,6 +119,8 @@ def parse_section_content(text: str, subsection_titles: list[str]) -> SectionCon
         
     except json.JSONDecodeError as e:
         logger.error(f"Failed to parse JSON response: {e}")
+        logger.error(f"Raw text: {text}")
+        logger.error(f"Cleaned text: {cleaned_text}")
         raise
     except KeyError as e:
         logger.error(f"Missing required field in response: {e}")
@@ -236,7 +275,12 @@ def generate_queries(state: SectionState, config: RunnableConfig):
     logger.info(f"Input state: {state}")
     logger.info(f"Config: {config}")
     
-    section = state["section"]
+    # Initialize state if needed
+    section = state.get("section")
+    if not section:
+        logger.error("No section provided in state")
+        return {"error": "No section provided in state"}
+        
     configurable = Configuration.from_runnable_config(config)
     number_of_queries = configurable.number_of_queries
 
@@ -259,7 +303,15 @@ def generate_queries(state: SectionState, config: RunnableConfig):
     queries = [{"search_query": q} for q in query_list]
     logger.info(f"Generated queries: {queries}")
 
-    return {"search_queries": queries}
+    # Return updated state
+    return {
+        "section": section,
+        "sections": state.get("sections", []),
+        "search_iterations": state.get("search_iterations", 0),
+        "search_queries": queries,
+        "source_str": state.get("source_str", ""),
+        "completed_sections": state.get("completed_sections", [])
+    }
 
 async def search_web(state: SectionState, config: RunnableConfig):
     """Search the web for each query"""
@@ -288,9 +340,18 @@ async def search_web(state: SectionState, config: RunnableConfig):
         raise ValueError(f"Unsupported search API: {configurable.search_api}")
 
     logger.info(f"Search results length: {len(source_str)}")
-    return {"source_str": source_str, "search_iterations": state["search_iterations"] + 1}
+    
+    # Return complete state
+    return {
+        "section": state["section"],
+        "sections": state["sections"],
+        "search_iterations": state["search_iterations"] + 1,
+        "search_queries": state["search_queries"],
+        "source_str": source_str,
+        "completed_sections": state.get("completed_sections", []).copy()  # Return a copy of the list
+    }
 
-def write_section(state: SectionState, config: RunnableConfig) -> Command[Literal[END]]:
+def write_section(state: SectionState, config: RunnableConfig):
     """Write a section of the report"""
     logger.info(f"\n{'='*80}\nWriting Section\n{'='*80}")
     logger.info(f"Input state: {state}")
@@ -328,29 +389,33 @@ def write_section(state: SectionState, config: RunnableConfig) -> Command[Litera
 
     # Find the index of the current section
     current_index = next((i for i, s in enumerate(sections) if s.name == section.name), -1)
+    completed_sections = state.get("completed_sections", []).copy()  # Make a copy of the list
+    completed_sections.append(section)  # Add current section to completed list
     
     # Check if there are more sections to process
     if current_index < len(sections) - 1:
         # Move to next section
         next_section = sections[current_index + 1]
         logger.info(f"Moving to next section: {next_section.name}")
-        return Command(
-            update={
-                "completed_sections": state.get("completed_sections", []) + [section],
-                "section": next_section,
-                "search_iterations": 0,
-                "search_queries": [],
-                "source_str": ""
-            },
-            goto="generate_queries"
-        )
+        return {
+            "section": next_section,
+            "sections": sections,
+            "search_iterations": 0,
+            "search_queries": [],
+            "source_str": "",
+            "completed_sections": completed_sections
+        }
     else:
         # All sections complete
         logger.info("All sections completed")
-        return Command(
-            update={"completed_sections": state.get("completed_sections", []) + [section]},
-            goto=END
-        )
+        return {
+            "section": section,
+            "sections": sections,
+            "search_iterations": state["search_iterations"],
+            "search_queries": state["search_queries"],
+            "source_str": state["source_str"],
+            "completed_sections": completed_sections
+        }
 
 def write_final_sections(state: SectionState):
     """Write final sections of the report"""
@@ -400,18 +465,8 @@ def gather_completed_sections(state: ReportState):
 # Report section sub-graph
 section_builder = StateGraph(SectionState, output=SectionOutputState)
 
-# Define state keys to pass through from outer graph to inner graph
-section_builder.set_entry_point(
-    "generate_queries",
-    lambda state: {
-        "section": state["section"],
-        "sections": state["sections"],  # Pass through sections
-        "search_iterations": state.get("search_iterations", 0),
-        "search_queries": state.get("search_queries", []),
-        "source_str": state.get("source_str", ""),
-        "completed_sections": state.get("completed_sections", [])
-    }
-)
+# Define simple entry point
+section_builder.set_entry_point("generate_queries")
 
 section_builder.add_node("generate_queries", generate_queries)
 section_builder.add_node("search_web", search_web)

@@ -12,12 +12,38 @@ report_planner_query_writer_instructions="""You are an expert technical writer, 
 <Task>
 Your goal is to generate {number_of_queries} search queries that will help gather comprehensive information for planning the learning roadmap sections. 
 
-The queries should:
+You must output your response in JSON format that matches this schema exactly:
 
-1. Be related to the topic of the learning roadmap
-2. Help satisfy the requirements specified in the learning roadmap organization
+{{
+  "type": "object",
+  "properties": {{
+    "queries": {{
+      "type": "array",
+      "description": "Array of search queries to help gather information",
+      "items": {{
+        "type": "object",
+        "properties": {{
+          "query": {{
+            "type": "string",
+            "description": "The search query text"
+          }},
+          "purpose": {{
+            "type": "string", 
+            "description": "Brief explanation of what information this query aims to find"
+          }}
+        }},
+        "required": ["query", "purpose"]
+      }}
+    }}
+  }},
+  "required": ["queries"]
+}}
 
-Make the queries specific enough to find high-quality, relevant sources while covering the breadth needed for the learning roadmap structure.
+Requirements:
+1. Queries should be related to the topic of the learning roadmap
+2. Queries should help satisfy the requirements specified in the learning roadmap organization
+3. Make queries specific enough to find high-quality, relevant sources
+4. Cover the breadth needed for the learning roadmap structure
 </Task>"""
 
 # Prompt to generate the learning roadmap plan
@@ -101,7 +127,40 @@ query_writer_instructions="""You are an expert technical teacher crafting target
 </Subsection titles>
 
 <Task>
-When generating {number_of_queries} search queries, ensure they:
+Your goal is to generate {number_of_queries} search queries that will help gather comprehensive information for writing this section.
+
+You must output your response in JSON format that matches this schema exactly:
+
+{{
+  "type": "object",
+  "properties": {{
+    "queries": {{
+      "type": "array", 
+      "description": "Array of search queries to help gather information",
+      "items": {{
+        "type": "object",
+        "properties": {{
+          "query": {{
+            "type": "string",
+            "description": "The search query text"
+          }},
+          "purpose": {{
+            "type": "string",
+            "description": "Brief explanation of what information this query aims to find"
+          }},
+          "target_subsection": {{
+            "type": "string",
+            "description": "Which subsection this query primarily targets"
+          }}
+        }},
+        "required": ["query", "purpose", "target_subsection"]
+      }}
+    }}
+  }},
+  "required": ["queries"]
+}}
+
+Requirements:
 1. Cover different aspects of the topic (e.g., core features, real-world applications, technical architecture)
 2. Include specific technical terms related to the topic
 3. Target recent information by including year markers where relevant (e.g., "2024")

@@ -3,6 +3,24 @@ from pydantic import BaseModel, Field
 import operator
 import json
 
+def merge_sections(left: 'Section', right: 'Section') -> 'Section':
+    """Merge two sections, taking the newer content if available."""
+    if not isinstance(left, Section) or not isinstance(right, Section):
+        return right
+    
+    # If sections have different names, return the right one
+    if left.name != right.name:
+        return right
+        
+    # Merge the sections, preferring right's values
+    return Section(
+        name=right.name,
+        description=right.description,
+        research=right.research,
+        content=right.content if right.content else left.content,
+        subsection_titles=right.subsection_titles if right.subsection_titles else left.subsection_titles
+    )
+
 class CustomJSONEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, BaseModel):
@@ -71,20 +89,21 @@ class ReportState(TypedDict):
     topic: str # Report topic    
     number_of_main_sections: int # Number of main sections to generate
     sections: list[Section] # List of report sections 
-    section: Annotated[Section, operator.add] # Current section being processed
+    section: Annotated[Section, merge_sections] # Current section being processed
     search_iterations: int # Number of search iterations done
     search_queries: list[SearchQuery] # List of search queries
     source_str: str # String of formatted source content from web search
-    completed_sections: Annotated[list, operator.add] # Send() API key
+    completed_sections: Annotated[list[Section], operator.add] # List of completed sections
     report_sections_from_research: str # String of any completed sections from research to write final sections
 
 class SectionState(TypedDict):
-    section: Annotated[Section, operator.add] # Report section with managed value annotation
+    section: Annotated[Section, merge_sections] # Report section with managed value annotation
+    sections: list[Section] # List of report sections
     search_iterations: int # Number of search iterations done
     search_queries: list[SearchQuery] # List of search queries
     source_str: str # String of formatted source content from web search
     report_sections_from_research: str # String of any completed sections from research to write final sections
-    completed_sections: list[Section] # Final key we duplicate in outer state for Send() API
+    completed_sections: Annotated[list[Section], operator.add] # Final key we duplicate in outer state for Send() API
 
 class SectionOutputState(TypedDict):
     completed_sections: list[Section] # Final key we duplicate in outer state for Send() API
