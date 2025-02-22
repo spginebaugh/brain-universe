@@ -49,6 +49,7 @@ src/features/deep-research/services/python/.venv/
 src/features/deep-research/services/python/__pycache__/
 src/features/deep-research/services/python/*.pyc
 src/features/deep-research/services/python/.langgraph_api/
+src/features/deep-research-python/
 
 src/src/features/deep-research/services/python/output_logs/
 

@@ -1,8 +1,0 @@
-#!/home/scott/Documents/code/brainuniverse/src/features/deep-research/services/python/.venv/bin/python
-# -*- coding: utf-8 -*-
-import re
-import sys
-from langgraph_cli.cli import cli
-if __name__ == '__main__':
-    sys.argv[0] = re.sub(r'(-script\.pyw|\.exe)?$', '', sys.argv[0])
-    sys.exit(cli())
