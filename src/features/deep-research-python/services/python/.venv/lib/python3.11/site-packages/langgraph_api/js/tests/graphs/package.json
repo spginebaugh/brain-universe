@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "dependencies": {
+    "@langchain/core": "^0.3.37",
+    "@langchain/langgraph": "^0.2.43"
+  }
+}
