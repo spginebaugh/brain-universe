@@ -1,6 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { StateGraph } from '@langchain/langgraph';
-import { buildResearchGraph } from './research-graph/graph-builder';
+import { buildResearchGraph, ResearchGraph } from './research-graph/graph-builder';
 import { useResearchStore } from '../stores/research-store';
 import { config } from '../config';
 import {
@@ -14,13 +13,10 @@ import {
   InterruptEvent,
   Section
 } from '../types/research';
-import { Command } from '@langchain/langgraph';
-
-type CompiledGraph = ReturnType<typeof buildResearchGraph>;
 
 export class ResearchService {
   private sessions: Map<string, {
-    graph: CompiledGraph;
+    graph: ResearchGraph;
     config: ResearchConfig;
   }>;
 
@@ -29,7 +25,7 @@ export class ResearchService {
   }
 
   private createSession(sessionId: string): {
-    graph: CompiledGraph;
+    graph: ResearchGraph;
     config: ResearchConfig;
   } {
     const sessionConfig: ResearchConfig = {
@@ -138,7 +134,7 @@ export class ResearchService {
     };
 
     try {
-      const stream = await session.graph.stream(initialState);
+      const stream = session.graph.stream(initialState);
       for await (const event of stream) {
         const processedEvent = this.processEvent(event, sessionId);
         useResearchStore.getState().addEvent(sessionId, processedEvent);
@@ -163,11 +159,16 @@ export class ResearchService {
     }
 
     try {
-      const stream = await session.graph.stream({
-        update: {},
-        resume: request.feedback,
-        goto: { node: 'research', args: { feedback: request.feedback } }
-      });
+      // Create a state update that includes the feedback
+      const stateUpdate = {
+        feedback: request.feedback,
+        searchIterations: 0, // Reset search iterations
+        searchQueries: [], // Reset search queries
+        section: null // Reset current section
+      };
+
+      const stream = session.graph.stream(stateUpdate);
+      
       for await (const event of stream) {
         const processedEvent = this.processEvent(event, request.sessionId);
         useResearchStore.getState().addEvent(request.sessionId, processedEvent);
