@@ -6,6 +6,8 @@ import {
   handleAuthRoute,
 } from '@/features/auth';
 
+export const runtime = 'experimental-edge';
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
