@@ -25,5 +25,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/graph-workspace', '/graph-workspace/*', '/sign-in', '/sign-up']
+  matcher: ['/graph-workspace', '/graph-workspace/:path*', '/sign-in', '/sign-up']
 }; 
