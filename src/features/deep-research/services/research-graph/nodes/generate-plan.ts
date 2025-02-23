@@ -33,7 +33,7 @@ Create {numberOfMainSections} main sections that would comprehensively cover thi
 For each section:
 1. Provide a clear title
 2. Section descriptions should be clear and concise
-3. List exactly 3 subsection titles that would help organize the content
+3. List exactly 6 subsection titles that would help organize the content
 
 Ensure the sections flow logically and cover the topic comprehensively using insights from the research.
 
@@ -167,8 +167,8 @@ export function generatePlanNode(
         if (!section.title || !section.description || !Array.isArray(section.subsectionTitles)) {
           throw new Error(`Invalid section structure at index ${index}`);
         }
-        if (section.subsectionTitles.length !== 3) {
-          throw new Error(`Section ${section.title} must have exactly 3 subsection titles`);
+        if (section.subsectionTitles.length !== 6) {
+          throw new Error(`Section ${section.title} must have exactly 6 subsection titles`);
         }
       });
 
