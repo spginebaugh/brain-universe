@@ -2,6 +2,7 @@ Deepsylabus
     A video
     Writen blog or textbooks
     A check for understanding
+       look into canvas https://www.instructure.com/canvas for formatting
 
 BrainUniverse: an AI-powered knowledge repository and exploration platform
 

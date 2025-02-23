@@ -1,5 +1,4 @@
 import { ResearchProgress } from '@/features/deep-research/components/research-progress';
-import { ResearchFeedback } from '@/features/deep-research/components/research-feedback';
 
 export default function ResearchPage() {
   return (
@@ -12,7 +11,6 @@ export default function ResearchPage() {
       </div>
 
       <ResearchProgress />
-      <ResearchFeedback />
     </div>
   );
 } 

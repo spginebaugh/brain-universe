@@ -1,6 +1,7 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
 import { ResearchConfig, Section } from '../../types/research';
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 
 // Node implementations will be imported from separate files
 import { generatePlanNode } from './nodes/generate-plan';
@@ -24,27 +25,40 @@ export interface ResearchGraph {
   stream: (initialState: Partial<ResearchState>) => AsyncGenerator<Partial<ResearchState>, void, unknown>;
 }
 
-export function buildResearchGraph(config: ResearchConfig): ResearchGraph {
-  // Initialize models with API keys
+interface GraphBuilderOptions {
+  callbacks?: BaseCallbackHandler[];
+}
+
+export function buildResearchGraph(
+  config: ResearchConfig, 
+  options: GraphBuilderOptions = {}
+): ResearchGraph {
+  const { callbacks } = options;
+
+  // Initialize models with API keys and callbacks
   const plannerModel = new ChatOpenAI({
     modelName: config.plannerModel,
     temperature: 0.7,
     openAIApiKey: config.openai.apiKey,
+    callbacks
   });
 
   const writerModel = new ChatOpenAI({
     modelName: config.writerModel,
     temperature: 0.7,
     openAIApiKey: config.openai.apiKey,
+    callbacks
   });
 
-  // Initialize tools with API keys
+  // Initialize tools with API keys and callbacks
   const searchTool = new TavilySearchResults({
     apiKey: config.tavily.apiKey,
+    callbacks,
+    maxResults: 5
   });
 
   // Create node instances
-  const planNode = generatePlanNode(plannerModel);
+  const planNode = generatePlanNode(plannerModel, searchTool);
   const researchNode = webSearchNode(searchTool);
   const writeNode = writeSectionNode(writerModel);
 
@@ -65,7 +79,7 @@ export function buildResearchGraph(config: ResearchConfig): ResearchGraph {
 
       // Start with planning if no sections exist
       if (!state.sections.length) {
-        const planResult = await planNode.invoke(state);
+        const planResult = await planNode.invoke(state, { callbacks });
         yield planResult;
         state = { ...state, ...planResult };
       }
@@ -73,12 +87,12 @@ export function buildResearchGraph(config: ResearchConfig): ResearchGraph {
       // Continue research and writing until all sections are completed
       while (state.completedSections.length < state.numberOfMainSections) {
         // Research phase
-        const researchResult = await researchNode.invoke(state);
+        const researchResult = await researchNode.invoke(state, { callbacks });
         yield researchResult;
         state = { ...state, ...researchResult };
 
         // Writing phase
-        const writeResult = await writeNode.invoke(state);
+        const writeResult = await writeNode.invoke(state, { callbacks });
         yield writeResult;
         state = { ...state, ...writeResult };
       }

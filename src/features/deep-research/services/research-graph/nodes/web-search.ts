@@ -1,7 +1,10 @@
 import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { PromptTemplate } from '@langchain/core/prompts';
+import { StringOutputParser } from '@langchain/core/output_parsers';
 import { ResearchState } from '../../../types/research';
+import { ChatOpenAI } from '@langchain/openai';
+import { config } from '../../../config';
 
 const SEARCH_QUERY_TEMPLATE = `Given the section to research:
 Title: {sectionTitle}
@@ -13,6 +16,14 @@ Keep the query concise but include key terms that will yield relevant results.`;
 
 export function webSearchNode(searchTool: TavilySearchResults) {
   const queryPrompt = PromptTemplate.fromTemplate(SEARCH_QUERY_TEMPLATE);
+  const stringParser = new StringOutputParser();
+  
+  // Initialize a model for query generation
+  const queryModel = new ChatOpenAI({
+    modelName: "gpt-3.5-turbo",
+    temperature: 0.7,
+    apiKey: config.openai.apiKey
+  });
 
   return RunnableSequence.from([
     // Extract section to research
@@ -33,19 +44,64 @@ export function webSearchNode(searchTool: TavilySearchResults) {
     },
     // Generate search query
     async (input) => {
-      const query = await queryPrompt.invoke(input);
-      return {
-        ...input,
-        query: String(query)
-      };
+      try {
+        const queryChain = queryPrompt.pipe(queryModel).pipe(stringParser);
+        const query = await queryChain.invoke(input);
+        
+        if (!query) {
+          throw new Error('Generated search query is empty');
+        }
+
+        console.log('Generated search query:', query);
+
+        return {
+          ...input,
+          query
+        };
+      } catch (error) {
+        throw new Error(`Failed to generate search query: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     },
     // Perform search
     async (input) => {
-      const results = await searchTool.invoke(input.query);
-      return {
-        section: input.section,
-        searchResults: results
-      };
+      try {
+        if (!input.query) {
+          throw new Error('Search query is required');
+        }
+
+        console.log('Executing Tavily search with query:', input.query);
+        const results = await searchTool.invoke(input.query);
+        
+        if (!results || !Array.isArray(results)) {
+          console.error('Invalid search results format:', results);
+          throw new Error('Invalid search results format returned');
+        }
+
+        if (results.length === 0) {
+          console.warn('No search results found for query:', input.query);
+        } else {
+          console.log(`Found ${results.length} search results`);
+        }
+
+        return {
+          section: input.section,
+          searchResults: results
+        };
+      } catch (error) {
+        console.error('Search error:', error);
+        
+        if (error instanceof Error) {
+          if (error.message.includes('400')) {
+            throw new Error('Invalid search request. Please check your API key and query format.');
+          } else if (error.message.includes('401')) {
+            throw new Error('Invalid or expired Tavily API key.');
+          } else if (error.message.includes('429')) {
+            throw new Error('Rate limit exceeded. Please try again later.');
+          }
+        }
+        
+        throw new Error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
     },
     // Update state
     async (result): Promise<Partial<ResearchState>> => {

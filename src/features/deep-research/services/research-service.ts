@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { buildResearchGraph, ResearchGraph } from './research-graph/graph-builder';
 import { useResearchStore } from '../stores/research-store';
 import { config } from '../config';
+import { ResearchLogger } from './research-logger';
 import {
   ResearchState,
   ResearchConfig,
@@ -41,7 +42,14 @@ export class ResearchService {
       langsmith: config.langsmith
     };
 
-    const graph = buildResearchGraph(sessionConfig);
+    // Create a logger instance for this session
+    const logger = new ResearchLogger(sessionId);
+
+    // Build graph with logger
+    const graph = buildResearchGraph(sessionConfig, {
+      callbacks: [logger]
+    });
+
     const session = { graph, config: sessionConfig };
     this.sessions.set(sessionId, session);
     

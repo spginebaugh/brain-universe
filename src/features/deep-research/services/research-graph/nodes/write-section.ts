@@ -1,7 +1,9 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { RunnableSequence, RunnableLambda } from '@langchain/core/runnables';
 import { PromptTemplate } from '@langchain/core/prompts';
-import { ResearchState, Section, SectionContent } from '../../../types/research';
+import { ResearchState, Section } from '../../../types/research';
+import { SectionContentSchema } from '../agents/types';
+import { z } from 'zod';
 
 const WRITE_SECTION_TEMPLATE = `You are a research writer tasked with writing a section of a comprehensive report.
 
@@ -19,18 +21,11 @@ Write a comprehensive section that:
 3. Incorporates relevant information from the research data
 4. Maintains academic tone and factual accuracy
 
-Format the response as a JSON object with:
-{
-  "overview": "string",
-  "subsections": {
-    "subsectionTitle": {
-      "title": "string",
-      "description": "string",
-      "content": "string",
-      "sources": [{"title": "string", "url": "string"}]
-    }
-  }
-}`;
+Each subsection must include:
+- A clear title matching one from the provided subsection titles
+- A brief description of the topics covered
+- Detailed content with citations
+- At least one relevant source with title and URL`;
 
 export function writeSectionNode(model: ChatOpenAI) {
   type PrepareOutput = {
@@ -60,19 +55,10 @@ export function writeSectionNode(model: ChatOpenAI) {
   });
 
   const processResponse = new RunnableLambda({
-    func: (input: { response: string; currentState: ResearchState }) => {
-      let sectionContent: SectionContent;
-      
-      try {
-        sectionContent = JSON.parse(input.response);
-      } catch (error: unknown) {
-        const e = error as Error;
-        throw new Error(`Failed to parse section content: ${e.message}`);
-      }
-
+    func: (input: { response: z.infer<typeof SectionContentSchema>; currentState: ResearchState }) => {
       const updatedSection: Section = {
         ...input.currentState.section!,
-        content: sectionContent
+        content: input.response
       };
 
       return {
@@ -84,8 +70,10 @@ export function writeSectionNode(model: ChatOpenAI) {
 
   return RunnableSequence.from([
     prepareData,
-    prompt,
-    model,
+    prompt.pipe(model.withStructuredOutput(SectionContentSchema, {
+      name: "SectionContentGenerator",
+      strict: true
+    })),
     processResponse
   ]);
 } 

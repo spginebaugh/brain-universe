@@ -22,36 +22,41 @@ export function ResearchProgress() {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto p-4 space-y-4">
-      <form onSubmit={handleSubmit} className="flex gap-2">
-        <Input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Enter your research topic..."
-          disabled={isLoading}
-          className="flex-1"
-        />
-        <Button type="submit" disabled={isLoading || !query.trim()}>
-          {isLoading ? 'Researching...' : 'Start Research'}
-        </Button>
-      </form>
+    <div className="w-full max-w-4xl mx-auto p-4 space-y-6">
+      <Card className="p-6">
+        <h2 className="text-2xl font-semibold mb-4">Deep Research</h2>
+        <p className="text-gray-600 mb-6">Enter a topic or question to start comprehensive research.</p>
+        
+        <form onSubmit={handleSubmit} className="flex gap-2">
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="e.g., 'What are the implications of quantum computing on cryptography?'"
+            disabled={isLoading}
+            className="flex-1"
+          />
+          <Button type="submit" disabled={isLoading || !query.trim()}>
+            {isLoading ? 'Researching...' : 'Start Research'}
+          </Button>
+        </form>
 
-      {error && (
-        <div className="text-red-500 p-2 rounded bg-red-50">
-          {error}
-        </div>
-      )}
+        {error && (
+          <div className="mt-4 text-red-500 p-2 rounded bg-red-50">
+            {error}
+          </div>
+        )}
+      </Card>
 
-      <ScrollArea className="h-[600px] rounded-md border p-4">
+      <ScrollArea className="h-[600px] rounded-md border">
         {sections.map((section, index) => (
-          <Card key={index} className="mb-4 p-4">
-            <h3 className="text-lg font-semibold mb-2">{section.title}</h3>
-            <p className="text-gray-600 mb-2">{section.description}</p>
+          <Card key={index} className="m-4 p-6">
+            <h3 className="text-xl font-semibold mb-3">{section.title}</h3>
+            <p className="text-gray-600 mb-4">{section.description}</p>
             
             {section.subsectionTitles && (
-              <div className="mb-4">
-                <h4 className="font-medium mb-1">Subsections:</h4>
-                <ul className="list-disc list-inside">
+              <div className="mb-6">
+                <h4 className="font-medium mb-2">Subsections:</h4>
+                <ul className="list-disc list-inside space-y-1">
                   {section.subsectionTitles.map((title, idx) => (
                     <li key={idx} className="text-gray-600">{title}</li>
                   ))}
@@ -62,18 +67,18 @@ export function ResearchProgress() {
             {section.content && (
               <div className="mt-4">
                 {typeof section.content === 'string' ? (
-                  <p className="whitespace-pre-wrap">{section.content}</p>
+                  <p className="whitespace-pre-wrap text-gray-700">{section.content}</p>
                 ) : (
-                  <div>
-                    <p className="mb-4">{section.content.overview}</p>
+                  <div className="space-y-6">
+                    <p className="text-gray-700">{section.content.overview}</p>
                     {Object.entries(section.content.subsections).map(([key, subsection]) => (
-                      <div key={key} className="mb-4">
-                        <h4 className="font-medium">{subsection.title}</h4>
-                        <p className="mb-2">{subsection.content}</p>
+                      <div key={key} className="space-y-3">
+                        <h4 className="text-lg font-medium">{subsection.title}</h4>
+                        <p className="text-gray-700">{subsection.content}</p>
                         {subsection.sources.length > 0 && (
-                          <div className="text-sm text-gray-500">
-                            Sources:
-                            <ul className="list-disc list-inside">
+                          <div className="text-sm text-gray-500 mt-2">
+                            <p className="font-medium mb-1">Sources:</p>
+                            <ul className="list-disc list-inside space-y-1">
                               {subsection.sources.map((source, idx) => (
                                 <li key={idx}>
                                   <a
