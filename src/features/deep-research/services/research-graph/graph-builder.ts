@@ -2,6 +2,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
 import { ResearchConfig, Section } from '../../types/research';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
+import { JsonOutputParser } from '@langchain/core/output_parsers';
 
 // Node implementations will be imported from separate files
 import { generatePlanNode } from './nodes/generate-plan';
@@ -29,11 +30,17 @@ interface GraphBuilderOptions {
   callbacks?: BaseCallbackHandler[];
 }
 
+interface ResearchResult extends Partial<ResearchState> {
+  content?: unknown;
+  additionalData?: Record<string, unknown>;
+}
+
 export function buildResearchGraph(
   config: ResearchConfig, 
   options: GraphBuilderOptions = {}
 ): ResearchGraph {
   const { callbacks } = options;
+  const jsonParser = new JsonOutputParser();
 
   // Initialize models with API keys and callbacks
   const plannerModel = new ChatOpenAI({
@@ -77,24 +84,38 @@ export function buildResearchGraph(
         reportSectionsFromResearch: initialState.reportSectionsFromResearch || ''
       };
 
-      // Start with planning if no sections exist
-      if (!state.sections.length) {
-        const planResult = await planNode.invoke(state, { callbacks });
-        yield planResult;
-        state = { ...state, ...planResult };
-      }
+      try {
+        // Start with planning if no sections exist
+        if (!state.sections.length) {
+          const planResult = await planNode.invoke(state, { callbacks }) as ResearchResult;
+          if (planResult.content && typeof planResult.content === 'string') {
+            planResult.content = await jsonParser.invoke(planResult.content);
+          }
+          yield planResult;
+          state = { ...state, ...planResult };
+        }
 
-      // Continue research and writing until all sections are completed
-      while (state.completedSections.length < state.numberOfMainSections) {
-        // Research phase
-        const researchResult = await researchNode.invoke(state, { callbacks });
-        yield researchResult;
-        state = { ...state, ...researchResult };
+        // Continue research and writing until all sections are completed
+        while (state.completedSections.length < state.numberOfMainSections) {
+          // Research phase
+          const researchResult = await researchNode.invoke(state, { callbacks }) as ResearchResult;
+          if (researchResult.content && typeof researchResult.content === 'string') {
+            researchResult.content = await jsonParser.invoke(researchResult.content);
+          }
+          yield researchResult;
+          state = { ...state, ...researchResult };
 
-        // Writing phase
-        const writeResult = await writeNode.invoke(state, { callbacks });
-        yield writeResult;
-        state = { ...state, ...writeResult };
+          // Writing phase
+          const writeResult = await writeNode.invoke(state, { callbacks }) as ResearchResult;
+          if (writeResult.content && typeof writeResult.content === 'string') {
+            writeResult.content = await jsonParser.invoke(writeResult.content);
+          }
+          yield writeResult;
+          state = { ...state, ...writeResult };
+        }
+      } catch (error) {
+        console.error('Error in research graph:', error);
+        throw error;
       }
     }
   };

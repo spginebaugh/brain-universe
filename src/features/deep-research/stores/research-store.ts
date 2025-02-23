@@ -23,37 +23,62 @@ interface ResearchStore {
 export const useResearchStore = create<ResearchStore>((set, get) => ({
   sessions: new Map(),
   
-  addSession: (id, session) => 
+  addSession: (id, session) => {
+    console.log('Adding session:', id, session);
     set((state) => ({
       sessions: new Map(state.sessions).set(id, session)
-    })),
+    }));
+  },
     
-  updateSession: (id, updates) => 
+  updateSession: (id, updates) => {
+    console.log('Updating session:', id, updates);
     set((state) => {
       const sessions = new Map(state.sessions);
       const currentSession = sessions.get(id);
       if (currentSession) {
-        sessions.set(id, { ...currentSession, ...updates });
+        const updatedSession = {
+          ...currentSession,
+          ...updates,
+          state: {
+            ...currentSession.state,
+            ...(updates.state || {})
+          }
+        };
+        console.log('Updated session:', updatedSession);
+        sessions.set(id, updatedSession);
       }
       return { sessions };
-    }),
+    });
+  },
     
-  addEvent: (id, event) =>
+  addEvent: (id, event) => {
+    console.log('Adding event:', id, event);
     set((state) => {
       const sessions = new Map(state.sessions);
       const session = sessions.get(id);
       if (session) {
-        sessions.set(id, {
+        const updatedSession = {
           ...session,
-          events: [...session.events, event]
-        });
+          events: [...session.events, event],
+          state: {
+            ...session.state,
+            completedSections: event.type === 'progress' ? event.sections : session.state.completedSections
+          }
+        };
+        console.log('Session after adding event:', updatedSession);
+        sessions.set(id, updatedSession);
       }
       return { sessions };
-    }),
+    });
+  },
     
   setCurrentSession: (id) => set({ currentSession: id }),
   
-  getSession: (id) => get().sessions.get(id),
+  getSession: (id) => {
+    const session = get().sessions.get(id);
+    console.log('Getting session:', id, session);
+    return session;
+  },
   
   reset: () => set({ sessions: new Map(), currentSession: undefined })
 })); 

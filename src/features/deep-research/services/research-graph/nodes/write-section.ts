@@ -21,9 +21,12 @@ Write a comprehensive section that:
 4. Maintains academic tone and factual accuracy
 
 Each subsection must include:
-- A clear title matching one from the provided subsection titles
-- A brief description of the topics covered
-- Detailed content with citations
+- The provided subsection titles
+- A brief description of the subsection
+- Content section. This should be an in-depth lesson about the subsection topic (at least 1000 words).
+    - Aim for factual accuracy and academic tone
+    - Go into depth about the subsection topic
+    - Write in a way that will provide readers a deep understanding of the topic
 - At least one relevant source with title and URL
 
 Format the response as a JSON object with:

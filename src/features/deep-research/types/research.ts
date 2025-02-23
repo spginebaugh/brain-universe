@@ -4,6 +4,7 @@ import { z } from 'zod';
 export interface ResearchRequest {
   query: string;
   numberOfMainSections?: number;
+  sessionId?: string;
 }
 
 export interface FeedbackRequest {

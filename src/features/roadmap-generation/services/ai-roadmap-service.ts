@@ -8,7 +8,7 @@ export class AIRoadmapService {
 
   constructor() {
     this.model = new ChatOpenAI({
-      modelName: "gpt-4",
+      modelName: "gpt-4o",
       temperature: 0.7,
       maxTokens: 2500,
       openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,

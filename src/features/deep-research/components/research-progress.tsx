@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useResearch } from '../hooks/use-research';
+import { useResearchWithExample } from '../hooks/use-research-with-example';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Card } from '@/shared/components/ui/card';
@@ -40,7 +40,7 @@ const SubsectionContent: React.FC<{ subsection: SubSection }> = ({ subsection })
     <div className="prose prose-sm max-w-none">
       <p className="text-gray-700 whitespace-pre-wrap">{subsection.content}</p>
     </div>
-    {subsection.sources.length > 0 && <SourcesList sources={subsection.sources} />}
+    {subsection.sources?.length > 0 && <SourcesList sources={subsection.sources} />}
   </div>
 );
 
@@ -101,24 +101,27 @@ const ResearchSection: React.FC<{ section: Section; isCompleted: boolean }> = ({
 
 export function ResearchProgress() {
   const [query, setQuery] = useState('');
-  const { isLoading, error, sections, currentSessionId, getSession, startResearch } = useResearch();
+  const { isLoading, error, currentSessionId, getSession, startResearch, loadExample } = useResearchWithExample();
   
-  const currentSession = currentSessionId ? getSession(currentSessionId) : undefined;
-  const completedSections = currentSession?.state.completedSections || [];
+  // Get completedSections directly from the session state
+  const session = currentSessionId ? getSession(currentSessionId) : undefined;
+  console.log('Current session in component:', session); // Debug log
+  
+  const completedSections = session?.state.completedSections || [];
+  console.log('Completed sections:', completedSections); // Debug log
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!query.trim()) return;
-
+    console.log('Starting research with query:', query); // Debug log
     await startResearch({
       query: query.trim(),
       numberOfMainSections: 6
     });
   };
 
-  const allSections = [...sections, ...completedSections];
-  const isCompleted = (section: Section) => 
-    completedSections.some((completed: Section) => completed.title === section.title);
+  // Log render state
+  console.log('Render state:', { isLoading, error, currentSessionId, completedSectionsLength: completedSections.length });
 
   return (
     <div className="w-full max-w-4xl mx-auto p-4 space-y-6">
@@ -128,18 +131,27 @@ export function ResearchProgress() {
           Enter a topic or question to start comprehensive research.
         </p>
         
-        <form onSubmit={handleSubmit} className="flex gap-2">
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="e.g., 'What are the implications of quantum computing on cryptography?'"
-            disabled={isLoading}
-            className="flex-1"
-          />
-          <Button type="submit" disabled={isLoading || !query.trim()}>
-            {isLoading ? 'Researching...' : 'Start Research'}
+        <div className="flex gap-2">
+          <form onSubmit={handleSubmit} className="flex gap-2 flex-1">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="e.g., 'What are the implications of quantum computing on cryptography?'"
+              disabled={isLoading}
+              className="flex-1"
+            />
+            <Button type="submit" disabled={isLoading || !query.trim()}>
+              {isLoading ? 'Researching...' : 'Start Research'}
+            </Button>
+          </form>
+          <Button 
+            variant="outline" 
+            onClick={loadExample}
+            className="whitespace-nowrap"
+          >
+            Load Example
           </Button>
-        </form>
+        </div>
 
         {error && (
           <div className="mt-4 text-red-500 p-2 rounded bg-red-50">
@@ -149,12 +161,12 @@ export function ResearchProgress() {
       </Card>
 
       <ScrollArea className="h-[600px] rounded-md border bg-gray-50">
-        {allSections.length > 0 ? (
-          allSections.map((section, index) => (
+        {completedSections.length > 0 ? (
+          completedSections.map((section, index) => (
             <ResearchSection 
               key={index} 
               section={section} 
-              isCompleted={isCompleted(section)} 
+              isCompleted={true} 
             />
           ))
         ) : isLoading ? (

@@ -7,11 +7,9 @@ import {
   ResearchState,
   ResearchConfig,
   ResearchRequest,
-  FeedbackRequest,
   ResearchEvent,
   ProgressEvent,
   ErrorEvent,
-  InterruptEvent,
   Section
 } from '../types/research';
 
@@ -34,9 +32,9 @@ export class ResearchService {
       searchApi: 'tavily',
       plannerProvider: 'openai',
       maxSearchDepth: 1,
-      plannerModel: 'gpt-4',
+      plannerModel: 'gpt-4o',
       numberOfQueries: 2,
-      writerModel: 'gpt-4',
+      writerModel: 'gpt-4o',
       openai: config.openai,
       tavily: config.tavily,
       langsmith: config.langsmith
@@ -57,6 +55,8 @@ export class ResearchService {
   }
 
   private processEvent(event: unknown, sessionId: string): ResearchEvent {
+    console.log('Processing event:', event);
+    
     if (typeof event === 'object' && event !== null) {
       const eventObj = event as Record<string, unknown>;
 
@@ -68,39 +68,25 @@ export class ResearchService {
         } as ErrorEvent;
       }
 
-      if ('__interrupt__' in eventObj) {
-        const interrupt = eventObj.__interrupt__;
-        const value = typeof interrupt === 'object' && interrupt !== null
-          ? String((interrupt as Record<string, unknown>).value || interrupt)
-          : String(interrupt);
-        const resumable = typeof interrupt === 'object' && interrupt !== null
-          ? Boolean((interrupt as Record<string, unknown>).resumable ?? true)
-          : true;
-
-        return {
-          type: 'interrupt',
-          sessionId,
-          value,
-          resumable,
-          requiresFeedback: true
-        } as InterruptEvent;
-      }
-
-      // Process sections
-      const sections: Section[] = [];
+      // Process sections - check for completedSections first
+      let sections: Section[] = [];
       
-      if ('sections' in eventObj && Array.isArray(eventObj.sections)) {
-        sections.push(...eventObj.sections as Section[]);
+      if ('completedSections' in eventObj && Array.isArray(eventObj.completedSections)) {
+        sections = eventObj.completedSections as Section[];
+      } else {
+        // Fallback to other section fields if completedSections is not present
+        if ('sections' in eventObj && Array.isArray(eventObj.sections)) {
+          sections.push(...eventObj.sections as Section[]);
+        }
+        if ('section' in eventObj && typeof eventObj.section === 'object' && eventObj.section !== null) {
+          sections.push(eventObj.section as Section);
+        }
       }
-      if ('section' in eventObj && typeof eventObj.section === 'object') {
-        sections.push(eventObj.section as Section);
-      }
-      if ('completed_sections' in eventObj && Array.isArray(eventObj.completed_sections)) {
-        sections.push(...eventObj.completed_sections as Section[]);
-      }
+
+      console.log('Processed sections:', sections);
 
       if (sections.length > 0) {
-        return {
+        const progressEvent: ProgressEvent = {
           type: 'progress',
           sessionId,
           content: null,
@@ -111,7 +97,9 @@ export class ResearchService {
             action: sections.length > 1 ? 'Planning sections' : 'Writing content',
             observation: `Generated content for ${sections.length} section(s)`
           }]
-        } as ProgressEvent;
+        };
+        console.log('Created progress event:', progressEvent);
+        return progressEvent;
       }
     }
 
@@ -126,7 +114,7 @@ export class ResearchService {
   }
 
   async *startResearch(request: ResearchRequest): AsyncGenerator<ResearchEvent> {
-    const sessionId = uuidv4();
+    const sessionId = request.sessionId || uuidv4();
     const session = this.createSession(sessionId);
 
     const initialState: ResearchState = {
@@ -156,40 +144,6 @@ export class ResearchService {
         error: e.message
       };
       useResearchStore.getState().addEvent(sessionId, errorEvent);
-      yield errorEvent;
-    }
-  }
-
-  async *provideFeedback(request: FeedbackRequest): AsyncGenerator<ResearchEvent> {
-    const session = this.sessions.get(request.sessionId);
-    if (!session) {
-      throw new Error('Invalid session');
-    }
-
-    try {
-      // Create a state update that includes the feedback
-      const stateUpdate = {
-        feedback: request.feedback,
-        searchIterations: 0, // Reset search iterations
-        searchQueries: [], // Reset search queries
-        section: null // Reset current section
-      };
-
-      const stream = session.graph.stream(stateUpdate);
-      
-      for await (const event of stream) {
-        const processedEvent = this.processEvent(event, request.sessionId);
-        useResearchStore.getState().addEvent(request.sessionId, processedEvent);
-        yield processedEvent;
-      }
-    } catch (error: unknown) {
-      const e = error as Error;
-      const errorEvent: ErrorEvent = {
-        type: 'error',
-        sessionId: request.sessionId,
-        error: e.message
-      };
-      useResearchStore.getState().addEvent(request.sessionId, errorEvent);
       yield errorEvent;
     }
   }

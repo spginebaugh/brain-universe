@@ -27,7 +27,7 @@ Format the response as a JSON array of queries, where each query has:
 Requirements:
 1. Cover different aspects of the topic (e.g., core features, real-world applications, technical architecture)
 2. Include specific technical terms related to the topic
-3. Target recent information by including year markers where relevant (e.g., "2024")
+3. Target recent information by including year markers where relevant (e.g., "2025")
 4. Look for comparisons or differentiators from similar technologies/approaches
 5. Search for both official documentation and practical implementation examples
 6. Address each subsection title specifically to ensure comprehensive coverage`;
@@ -38,7 +38,7 @@ export function webSearchNode(searchTool: TavilySearchResults) {
   
   // Initialize a model for query generation
   const queryModel = new ChatOpenAI({
-    modelName: "gpt-4",
+    modelName: "gpt-4o",
     temperature: 0.7,
     apiKey: config.openai.apiKey
   });
