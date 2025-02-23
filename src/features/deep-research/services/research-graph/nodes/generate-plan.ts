@@ -6,20 +6,25 @@ import { ResearchState, Section } from '../../../types/research';
 import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
 
 // Template for generating initial research queries
-const QUERY_GENERATION_TEMPLATE = `You are a research planning assistant. Generate search queries to gather comprehensive information about: {topic}
+const QUERY_GENERATION_TEMPLATE = `You are an expert technical writer helping to plan a learning roadmap.. Generate search queries to gather comprehensive information about: {topic}
 
 Generate {numberOfQueries} search queries that will help understand:
 1. Core concepts and fundamentals
 2. Main components or aspects
 3. Best practices and common approaches
-4. Current trends and developments
+4. Current trends and cutting-edge developments
+
+Requirements:
+1. Queries should be related to the topic of the learning roadmap
+2. Make queries specific enough to find high-quality, relevant sources
+3. Cover the breadth needed for the learning roadmap structure
 
 Format the response as a JSON array of queries, where each query has:
 - query: string
 - purpose: string`;
 
 // Template for creating the plan using research
-const PLAN_TEMPLATE = `You are a research planning assistant. Create a structured plan for researching: {topic}
+const PLAN_TEMPLATE = `You are an expert technical writer helping to plan a learning roadmap for the topic: {topic}
 
 Using the following research context:
 {researchContext}
@@ -27,15 +32,15 @@ Using the following research context:
 Create {numberOfMainSections} main sections that would comprehensively cover this topic.
 For each section:
 1. Provide a clear title
-2. Write a brief description of what should be covered
+2. Section descriptions should be clear and concise
 3. List exactly 3 subsection titles that would help organize the content
+
+Ensure the sections flow logically and cover the topic comprehensively using insights from the research.
 
 Format the response as a JSON array of sections, where each section has:
 - title: string
 - description: string
-- subsectionTitles: string[]
-
-Ensure the sections flow logically and cover the topic comprehensively using insights from the research.`;
+- subsectionTitles: string[]`;
 
 interface QueryResult {
   query: string;

@@ -2,7 +2,7 @@ import { ChatOpenAI } from '@langchain/openai';
 import { RunnableSequence, RunnableLambda } from '@langchain/core/runnables';
 import { PromptTemplate } from '@langchain/core/prompts';
 import { ResearchState, Section } from '../../../types/research';
-import { SectionContentSchema } from '../agents/types';
+import { SectionContentSchema } from './types';
 import { z } from 'zod';
 
 const WRITE_SECTION_TEMPLATE = `You are a research writer tasked with writing a section of a comprehensive report.

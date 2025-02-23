@@ -9,10 +9,23 @@ import { config } from '../../../config';
 const SEARCH_QUERY_TEMPLATE = `Given the section to research:
 Title: {sectionTitle}
 Description: {sectionDescription}
+Subsections: {subsectionTitles}
 
-Generate a search query that will help find relevant information for this section.
-The query should be specific and focused on gathering accurate information.
-Keep the query concise but include key terms that will yield relevant results.`;
+Your goal is to generate {numberOfQueries} search queries that will help gather comprehensive information for writing this section.
+
+Requirements:
+1. Cover different aspects of the topic (e.g., core features, real-world applications, technical architecture)
+2. Include specific technical terms related to the topic
+3. Target recent information by including year markers where relevant (e.g., "2024")
+4. Look for comparisons or differentiators from similar technologies/approaches
+5. Search for both official documentation and practical implementation examples
+6. Address each subsection title specifically to ensure comprehensive coverage
+
+Your queries should be:
+- Specific enough to avoid generic results
+- Technical enough to capture detailed implementation information
+- Diverse enough to cover all aspects of the section plan and subsections
+- Focused on authoritative sources (documentation, technical blogs, academic papers)`;
 
 export function webSearchNode(searchTool: TavilySearchResults) {
   const queryPrompt = PromptTemplate.fromTemplate(SEARCH_QUERY_TEMPLATE);
