@@ -1,0 +1,367 @@
+{
+    "section": null,
+    "completedSections": [
+      {
+        "title": "Introduction to AI in Biology",
+        "description": "This section provides an overview of how artificial intelligence (AI), machine learning (ML), and deep learning (DL) are used in biology. It introduces the foundational methodologies and explains how they can enhance data analysis, image processing, protein structure prediction, and more in various biological fields.",
+        "subsectionTitles": [
+          "AI, ML, and DL: What Are They and How Do They Work?",
+          "Applications of AI in Biology",
+          "Understanding the Intersection of AI and Biology"
+        ],
+        "content": {
+          "overview": "This section provides an in-depth understanding of how artificial intelligence (AI), machine learning (ML), and deep learning (DL) are applied in biology. AI, ML, and DL are subsets of each other where AI mimics human intelligence, ML learns patterns from data and DL uses neural networks for complex tasks. These technologies are greatly enhancing data analysis, image processing, protein structure prediction, and more in different biological fields. The section includes detailed explanations of these technologies, their intersection with biology, and real-world applications in biology.",
+          "subsections": {
+            "section1": {
+              "title": "AI, ML, and DL: What Are They and How Do They Work?",
+              "description": "This subsection explains the concepts of AI, ML, and DL, emphasizing their relationship and specific functionalities.",
+              "content": "Artificial Intelligence (AI) is the broad discipline that aims to simulate human intelligence in machines, enabling them to perform tasks like learning, reasoning, and problem-solving[^1^]. Machine Learning (ML), a subset of AI, focuses on enabling machines to learn from and make decisions based on data[^2^]. Deep Learning (DL), a specialized subset of ML, uses artificial neural networks to process and analyze large amounts of data, allowing machines to learn from data and improve their performance over time[^3^].",
+              "sources": [
+                {
+                  "title": "Understanding the Differences between AI, Machine Learning ... - Neurosnap",
+                  "url": "https://neurosnap.ai/blog/post/64279cadfeb3e5ca5ba0904a"
+                },
+                {
+                  "title": "AI vs ML vs DL: A Comprehensive Comparison - Codoid",
+                  "url": "https://codoid.com/ai/ai-vs-ml-vs-dl-a-comprehensive-comparison/"
+                },
+                {
+                  "title": "AI vs ML vs DL vs Data Science: Understanding the Differences - AI News",
+                  "url": "https://aquariusai.ca/blog/the-difference-between-ai-ml-dl-and-data-science-explained"
+                }
+              ]
+            },
+            "section2": {
+              "title": "Applications of AI in Biology",
+              "description": "This subsection discusses the various applications of AI, ML, and DL in biology, from image data analysis to personalized medicine.",
+              "content": "AI, ML, and DL have transformative applications in biology, particularly in biomedical fields and bioinformatics. AI and ML algorithms can analyze genetic data to identify mutations that increase susceptibility to diseases[^4^]. They are also used in image data analysis across various biomedical fields, such as cell biology and pathology, with applications in object detection, feature extraction, classification, and segmentation[^5^]. In bioinformatics, AI techniques contribute to tasks such as genome sequencing, protein structure prediction, drug discovery, personalized medicine, imaging, signal processing, and text mining[^6^].",
+              "sources": [
+                {
+                  "title": "The Role of AI and Machine Learning in Biomedical Applications",
+                  "url": "https://biomedicalengineering.io/insight/the-role-of-ai-and-machine-learning-in-biomedical-applications/"
+                },
+                {
+                  "title": "Applications of Artificial Intelligence, Deep Learning, and Machine ...",
+                  "url": "https://www.mdpi.com/2313-433X/11/2/59"
+                },
+                {
+                  "title": "Artificial intelligence and bioinformatics: a journey from traditional ...",
+                  "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11413381/"
+                }
+              ]
+            },
+            "section3": {
+              "title": "Understanding the Intersection of AI and Biology",
+              "description": "This subsection explores how AI and biology intersect, bringing forth new horizons for data-driven discovery.",
+              "content": "The intersection of AI and biology holds the promise of a new era of scientific discovery and innovation[^7^]. AI techniques, such as reinforcement learning, have been applied to optimize laboratory experiments, including protein folding simulations, improving efficiency and accuracy[^8^]. Furthermore, the integration of AI in protein structure prediction enhances our understanding of molecular biology and can revolutionize drug design[^9^]. However, challenges relating to privacy, bias, and accountability must be addressed to ensure responsible development and deployment of AI technologies in biological sciences[^7^].",
+              "sources": [
+                {
+                  "title": "A meshwork of artificial intelligence and biology: The future of ...",
+                  "url": "https://www.sciencedirect.com/science/article/pii/B9780443240010000191"
+                },
+                {
+                  "title": "AI in Biology: New Horizons for Data-Driven Discovery",
+                  "url": "https://biologyinsights.com/ai-in-biology-new-horizons-for-data-driven-discovery/"
+                },
+                {
+                  "title": "AI in Bioinformatics and Computational Biology - Medium",
+                  "url": "https://medium.com/agileinsider/ai-in-bioinformatics-and-computational-biology-725688185c3a"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "AI in Bioinformatics and Genomics",
+        "description": "Explores the application of AI techniques such as ML, DL, and natural language processing (NLP) in bioinformatics and genomics. This includes tasks such as genome sequencing, protein structure prediction, and drug discovery.",
+        "subsectionTitles": [
+          "AI in Genome Sequencing and Analysis",
+          "Protein Structure Prediction Using AI",
+          "AI in Drug Discovery and System Biology"
+        ],
+        "content": {
+          "overview": "The section 'AI in Bioinformatics and Genomics' explores the role and application of advanced AI techniques like Machine Learning (ML), Deep Learning (DL), and Natural Language Processing (NLP) in the realm of bioinformatics and genomics. The topics covered include genome sequencing, protein structure prediction, and drug discovery, showcasing how AI has revolutionized these areas by improving efficiency, accuracy, and speed. The integration of AI in these domains is transforming the understanding of genetic variants, molecular interactions, and drug development processes.",
+          "subsections": {
+            "AI in Genome Sequencing and Analysis": {
+              "title": "AI in Genome Sequencing and Analysis",
+              "description": "This subsection delves into the use of AI in genome sequencing and analysis, focusing on its application in understanding genetic variants of diseases like COVID-19.",
+              "content": "AI techniques have proven crucial in genome sequence analysis, helping researchers and medical experts understand the genetic variants of diseases such as COVID-19. This analysis is essential to comprehend a virus's origin, behavior, and structure [1]. AI models can utilize genomic data to identify disease subtypes and assist in precise and targeted editing of the genetic code of organisms using technologies like CRISPR/Cas9 [5].",
+              "sources": [
+                {
+                  "title": "Enabling Artificial Intelligence for Genome Sequence Analysis ... - PubMed",
+                  "url": "https://pubmed.ncbi.nlm.nih.gov/34357528/"
+                },
+                {
+                  "title": "Advancing genome editing with artificial intelligence: opportunities ...",
+                  "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10800897/"
+                }
+              ]
+            },
+            "Protein Structure Prediction Using AI": {
+              "title": "Protein Structure Prediction Using AI",
+              "description": "This subsection discusses how AI and DL techniques are used to predict protein structures from amino acid sequences.",
+              "content": "AI and DL techniques have advanced protein structure prediction. Computational models, such as AlphaFold2 and ProteinBERT, utilize AI to reliably predict protein structures from amino acid sequences [7]. These AI-aided methods offer accurate models of protein folding without relying on expensive experimental techniques [10].",
+              "sources": [
+                {
+                  "title": "AI-Driven Deep Learning Techniques in Protein Structure Prediction",
+                  "url": "https://pubmed.ncbi.nlm.nih.gov/39125995/"
+                },
+                {
+                  "title": "Deep learning methods for protein structure prediction",
+                  "url": "https://onlinelibrary.wiley.com/doi/full/10.1002/mef2.96"
+                }
+              ]
+            },
+            "AI in Drug Discovery and System Biology": {
+              "title": "AI in Drug Discovery and System Biology",
+              "description": "This subsection explores the transformative role of AI in drug discovery and system biology, focusing on target identification, validation, and prediction of molecular interactions.",
+              "content": "AI is revolutionizing the pharmaceutical industry, from drug discovery to personalized medicine. AI techniques streamline the drug discovery process by predicting molecular interactions and optimizing drug formulations [12]. AI-based models have been developed for various steps of drug discovery, changing the landscape of the field [14]. By combining the predictive power of AI with human expertise, the process of drug discovery is optimized and accelerated [15].",
+              "sources": [
+                {
+                  "title": "Artificial Intelligence (AI) Applications in Drug Discovery and Drug ...",
+                  "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11510778/"
+                },
+                {
+                  "title": "The Role of AI in Drug Discovery: Challenges, Opportunities, and ...",
+                  "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10302890/"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "AI in Medical and Healthcare Biology",
+        "description": "Details the role of AI in various branches of medical sciences, from diagnostics to personalized medicine. It discusses how AI models are being used in disease prediction, patient care, and medical education.",
+        "subsectionTitles": [
+          "AI in Disease Prediction and Personalized Medicine",
+          "AI in Patient Care and Medical Education",
+          "AI and Biomarker Discovery"
+        ],
+        "content": {
+          "overview": "This section delves into the significant role of Artificial Intelligence (AI) in various branches of medical sciences, ranging from diagnostics to personalized medicine. It will cover how AI models contribute to disease prediction, patient care, medical education, and the discovery of biomarkers. The advent of AI has transformed medical sciences, revolutionizing patient care and fostering advancements in personalized medicine. By harnessing the power of AI, healthcare professionals can improve diagnostic accuracy, optimize treatment plans, and enhance patient outcomes.",
+          "subsections": {
+            "AI in Disease Prediction and Personalized Medicine": {
+              "title": "AI in Disease Prediction and Personalized Medicine",
+              "description": "This subsection explores how AI is used in disease prediction and the development of personalized medicine.",
+              "content": "AI plays a transformative role in reshaping pharmacogenomics and drug therapy, signaling a paradigm shift in personalized medicine. It guides treatment decisions, minimizes adverse reactions, and optimizes drug dosages in clinical settings, offering a more effective and patient-centric approach to drug therapy ('AI's role in revolutionizing personalized medicine by reshaping pharmacogenomics and drug therapy'). Furthermore, AI/ML algorithms for precision medicine have shown promising results in disease risk prediction, phenotypic prediction, and treatment response with a high degree of precision and accuracy ('Artificial intelligence and machine learning in precision medicine').",
+              "sources": [
+                {
+                  "title": "AI's role in revolutionizing personalized medicine by reshaping pharmacogenomics and drug therapy",
+                  "url": "https://www.sciencedirect.com/science/article/pii/S2949866X2400087X"
+                },
+                {
+                  "title": "Artificial intelligence and machine learning in precision medicine",
+                  "url": "https://www.sciencedirect.com/science/article/pii/S1877117322000436"
+                }
+              ]
+            },
+            "AI in Patient Care and Medical Education": {
+              "title": "AI in Patient Care and Medical Education",
+              "description": "This subsection discusses the use of AI in patient care and medical education.",
+              "content": "AI transforms patient care in personalized medicine, serving as a valuable tool for improving clinical decision support systems and care delivery ('Artificial intelligence and personalized medicine: transforming patient care'). AI's integration into medical education helps keep up with the rapidly evolving healthcare landscape, assisting teachers in understanding their students better and helping students learn as per their learning pattern ('Application of Artificial Intelligence in Medical Education: Current ...').",
+              "sources": [
+                {
+                  "title": "Artificial intelligence and personalized medicine: transforming patient care",
+                  "url": "https://www.sciencedirect.com/science/article/pii/B9780443139635000121"
+                },
+                {
+                  "title": "Application of Artificial Intelligence in Medical Education: Current ...",
+                  "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10352669/"
+                }
+              ]
+            },
+            "AI and Biomarker Discovery": {
+              "title": "AI and Biomarker Discovery",
+              "description": "This subsection highlights how AI is used in the discovery of biomarkers.",
+              "content": "AI-based methods have expanded the horizon for biomarker discovery, demonstrating the power of integrating multimodal data from existing datasets to discover new meta-biomarkers ('Artificial intelligence for predictive biomarker discovery in immuno ...'). High-throughput proteomic technology coupled with AI-based techniques provide opportunities for developing next-generation biomarkers for clinical practice ('High-throughput proteomics and AI for cancer biomarker discovery').",
+              "sources": [
+                {
+                  "title": "Artificial intelligence for predictive biomarker discovery in immuno ...",
+                  "url": "https://pubmed.ncbi.nlm.nih.gov/37879443/"
+                },
+                {
+                  "title": "High-throughput proteomics and AI for cancer biomarker discovery",
+                  "url": "https://pubmed.ncbi.nlm.nih.gov/34182017/"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "AI in Agricultural and Environmental Biology",
+        "description": "Highlights the applications of AI in the agricultural and environmental sectors of biology. It showcases how AI can aid in tasks such as growth modeling and data interpretation in these fields.",
+        "subsectionTitles": [
+          "AI in Precision Agriculture",
+          "Growth Modeling with AI",
+          "AI in Environmental Biology"
+        ],
+        "content": {
+          "overview": "This section provides a detailed look at the applications of artificial intelligence (AI) in the agricultural and environmental sectors of biology. The advent of AI has revolutionized these fields, with innovative solutions for tasks such as growth modeling and data interpretation. AI's potential in these areas is far-reaching, helping to improve crop management, monitor environmental conditions, and predict future trends. It's also making significant contributions in precision farming, offering solutions to labor shortages, and enhancing resource efficiency.",
+          "subsections": {
+            "AI in Precision Agriculture": {
+              "title": "AI in Precision Agriculture",
+              "description": "This subsection explores AI's role in precision agriculture, including aspects like autonomous weeding and seeding, crop monitoring, and predictive analytics.",
+              "content": "AI applications in precision farming are paving the way for innovative solutions addressing labor shortages and improving crop management. Examples include the Farm Droid, a solar-powered robot designed for both seeding and weeding. AI's integration in agriculture has led to significant advancements, offering solutions to long-standing industry challenges. It also aids in accurately predicting demand, efficiently managing resources, and conducting thorough market data analyses [Restackio, www.ijfmr.com].",
+              "sources": [
+                {
+                  "title": "Ai Applications In Precision Farming 2024 | Restackio",
+                  "url": "https://www.restack.io/p/ai-for-precision-agriculture-answer-ai-applications-in-precision-farming-2024-cat-ai"
+                },
+                {
+                  "title": "PDF | International Journal for Multidisciplinary Research (IJFMR)",
+                  "url": "https://www.ijfmr.com/papers/2024/6/29913.pdf"
+                }
+              ]
+            },
+            "Growth Modeling with AI": {
+              "title": "Growth Modeling with AI",
+              "description": "This subsection discusses how AI helps in growth modeling and selecting the most relevant responses based on data.",
+              "content": "AI's capability to analyze and select the most relevant responses based on data is in development. This open-source code will soon be available, enabling the community to access and contribute to the evolution of the technology that drives AI's decision-making processes in growth modeling [growth-ai.gitbook.io, medium.com].",
+              "sources": [
+                {
+                  "title": "Technical Architecture | Growth ai-agent Dcos",
+                  "url": "https://growth-ai.gitbook.io/growth-ai-agent-docs/technical-architecture"
+                },
+                {
+                  "title": "Aligning AI and Enterprise Architecture for Growth",
+                  "url": "https://medium.com/salesforce-architects/aligning-ai-and-enterprise-architecture-for-growth-13a84306a71a"
+                }
+              ]
+            },
+            "AI in Environmental Biology": {
+              "title": "AI in Environmental Biology",
+              "description": "This subsection covers the applications of AI in environmental biology, including environmental monitoring and biodiversity conservation.",
+              "content": "AI has shown great potential in environmental monitoring, offering accurate disaster forecasts, pollution source detection, and comprehensive air and water quality monitoring. Despite challenges such as a shortage of specialized AI experts in the environmental sector and issues related to data access, control, and privacy, the future of AI in environmental monitoring remains promising. Further, AI has been integrated into biodiversity conservation, bridging classical and modern approaches. It's not only forecasting the outbreak of new diseases but also helping in tracking, diagnosis, and treatment, leading to effective control and potential [sciencedirect.com, link.springer.com].",
+              "sources": [
+                {
+                  "title": "Artificial intelligence in environmental monitoring: Advancements ...",
+                  "url": "https://www.sciencedirect.com/science/article/pii/S2773049224000278"
+                },
+                {
+                  "title": "Integrating artificial intelligence in biodiversity conservation ...",
+                  "url": "https://link.springer.com/article/10.1007/s10531-024-02977-9"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Challenges and Ethical Considerations in AI Biology",
+        "description": "Discusses the challenges and ethical issues surrounding the use of AI in biology, including data privacy, transparency, and the potential for misuse. It also covers best practices for the successful use of AI and ML in biological research.",
+        "subsectionTitles": [
+          "Challenges in Implementing AI in Biology",
+          "Ethical Considerations in AI Biology",
+          "Best Practices for AI in Biological Research"
+        ],
+        "content": {
+          "overview": "This section explores the challenges and ethical implications associated with implementing artificial intelligence (AI) and machine learning (ML) in biological research. It delves into the potential issues of data privacy, transparency, and misuse of technology, while also examining best practices for harnessing AI and ML to enhance biological research. The ethical considerations and best practices discussed here are aimed at ensuring that the use of AI in biology is both responsible and beneficial for scientific discovery.",
+          "subsections": {
+            "Challenges in Implementing AI in Biology": {
+              "title": "Challenges in Implementing AI in Biology",
+              "description": "This subsection discusses the difficulties and limitations of employing AI in biological research.",
+              "content": "Implementing AI in biology presents unique challenges. One key issue is the imbalance in data, which can complicate the use of AI techniques in biological research (Source: Data imbalance a key challenge for AI in biology - Nature). Moreover, the sheer volume of data generated by biomedical imaging and other biological research methods can overwhelm traditional data processing techniques, necessitating the use of AI for rapid processing (Source: AI in biology and health: opportunities and challenges - EMBL).",
+              "sources": [
+                {
+                  "title": "Data imbalance a key challenge for AI in biology - Nature",
+                  "url": "https://www.nature.com/articles/d44151-024-00199-0"
+                },
+                {
+                  "title": "AI in biology and health: opportunities and challenges - EMBL",
+                  "url": "https://www.embl.org/news/lab-matters/ai-in-biology-and-health-opportunities-and-challenges/"
+                }
+              ]
+            },
+            "Ethical Considerations in AI Biology": {
+              "title": "Ethical Considerations in AI Biology",
+              "description": "This subsection explores the ethical concerns associated with the use of AI in biological research.",
+              "content": "The use of AI in biology raises several ethical issues. Data privacy is a significant concern, as vast amounts of sensitive biological data are often required for AI analysis. The misuse of this data, whether intentional or not, can have serious repercussions. Transparency is another critical ethical consideration, as it is crucial for users and stakeholders to understand how AI algorithms make decisions (Source: Embedding AI in biology - Nature Methods).",
+              "sources": [
+                {
+                  "title": "Embedding AI in biology - Nature Methods",
+                  "url": "https://www.nature.com/articles/s41592-024-02391-7"
+                }
+              ]
+            },
+            "Best Practices for AI in Biological Research": {
+              "title": "Best Practices for AI in Biological Research",
+              "description": "This subsection provides a guide on the best practices for implementing AI in biological research.",
+              "content": "Ensuring the successful use of AI and ML in biological research involves adhering to several best practices. These include pre-deployment testing, risk identification and mitigation, and ongoing monitoring (Source: Three best practices for AI/ML security - SC Media). Moreover, the use of FAIR data management procedures can improve the adoption of ML and AI-based tools (Source: Best practices for artificial intelligence in life sciences research).",
+              "sources": [
+                {
+                  "title": "Three best practices for AI/ML security - SC Media",
+                  "url": "https://www.scworld.com/perspective/three-best-practices-for-ml-ai-security"
+                },
+                {
+                  "title": "Best practices for artificial intelligence in life sciences research",
+                  "url": "https://www.sciencedirect.com/science/article/pii/S1359644621000477"
+                }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Future Trends and Developments in AI Biology",
+        "description": "Examines the future of AI in biology, including advancements in proteomics, the use of AI in biomarker discovery, and the potential of AI models in designing biological sequences. It also discusses the role of AI in emerging research fields.",
+        "subsectionTitles": [
+          "AI in Proteomics and Biomarker Discovery",
+          "AI Models in Biological Sequence Design",
+          "Emerging Research Fields in AI Biology"
+        ],
+        "content": {
+          "overview": "This section examines the emerging trends and future developments in the intersection of artificial intelligence (AI) and biology. It delves into advancements in proteomics, the role of AI in biomarker discovery, and the potential of AI models in designing biological sequences. The section also sheds light on the role of AI in emerging research fields within biology, promising significant advancements in precision medicine, bioinformatics, and drug discovery.",
+          "subsections": {
+            "1": {
+              "title": "AI in Proteomics and Biomarker Discovery",
+              "description": "This subsection explores how AI is revolutionizing proteomics and biomarker discovery, contributing to advancements in personalized medicine.",
+              "content": "Artificial intelligence is reshaping proteomics and multiomics, enhancing data analysis, biomarker discovery, and personalized medicine through innovative techniques. For instance, Google DeepMind's significant contributions to this field have earned it a half share of the 2024 Nobel Prize for Chemistry ('How Is AI Shaping Proteomics and Multiomics?'). Moreover, advancements in AI and interdisciplinary collaborations are set to enhance AI's roles in biomarker discovery further ('The Authors. Creative Commons Attribution-NonCommercial').",
+              "sources": [
+                {
+                  "title": "How Is AI Shaping Proteomics and Multiomics?",
+                  "url": "https://www.technologynetworks.com/proteomics/articles/how-is-ai-shaping-proteomics-and-multiomics-395403"
+                },
+                {
+                  "title": "The Authors. Creative Commons Attribution-NonCommercial",
+                  "url": "https://www.cancerbiomed.org/content/cbm/early/2025/01/02/j.issn.2095-3941.2024.0376.full.pdf"
+                }
+              ]
+            },
+            "2": {
+              "title": "AI Models in Biological Sequence Design",
+              "description": "This subsection discusses the applications of AI models in designing biological sequences, focusing on digital experiments and predictive modeling techniques.",
+              "content": "Artificial intelligence models are increasingly used in biological sequence design. AI can be employed in conducting digital experiments, navigating the vast sequence landscape, and elucidating the connections between sequence and function ('Artificial intelligence-guided strategies for next-generation...'). Models like EAGLE can generate antibody sequences of various lengths, operating in a continuous space ('Antibody design using deep learning: from sequence and structure design...').",
+              "sources": [
+                {
+                  "title": "Artificial intelligence-guided strategies for next-generation...",
+                  "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11601974"
+                },
+                {
+                  "title": "Antibody design using deep learning: from sequence and structure design...",
+                  "url": "https://academic.oup.com/bib/article/25/4/bbae307/7705535"
+                }
+              ]
+            },
+            "3": {
+              "title": "Emerging Research Fields in AI Biology",
+              "description": "This subsection explores the emerging research fields in AI biology, discussing the transformative role of AI in bioinformatics.",
+              "content": "The integration of AI algorithms with genomic data is transforming bioinformatics. AI aids in the early identification of high-risk individuals and optimizes potential drug candidates, marking a transformative journey in scientific discovery and healthcare ('Top 10 Transformative Integrations of AI into Bioinformatics in 2024'). Hot research topics in AI and biology include AI's role in chemistry, medicine, and geology ('Hot research topics in AI and biology: insights from the Map of Science').",
+              "sources": [
+                {
+                  "title": "Top 10 Transformative Integrations of AI into Bioinformatics in 2024",
+                  "url": "https://omicstutorials.com/top-10-transformative-integrations-of-ai-into-bioinformatics-in-2024/"
+                },
+                {
+                  "title": "Hot research topics in AI and biology: insights from the Map of Science",
+                  "url": "https://eto.tech/blog/hot-research-topics-ai-bio-map-of-science/"
+                }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }

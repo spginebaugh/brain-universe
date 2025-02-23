@@ -37,20 +37,20 @@ export interface SectionPlan {
 
 export const SourceSchema = z.object({
   title: z.string().describe("The title of the source"),
-  url: z.string().url().describe("The URL of the source")
-}).describe("A reference source");
+  url: z.string().describe("The URL of the source")
+}).strict().required().describe("A reference source");
 
 export const SubsectionSchema = z.object({
   title: z.string().describe("The title of the subsection"),
   description: z.string().describe("A brief description of the topics covered"),
   content: z.string().describe("The detailed content of the subsection"),
   sources: z.array(SourceSchema).describe("List of sources referenced in this subsection")
-}).describe("A subsection of the content");
+}).strict().required().describe("A subsection of the content");
 
 export const SectionContentSchema = z.object({
   overview: z.string().describe("A 100-150 word overview of the section"),
   subsections: z.record(SubsectionSchema).describe("Map of subsection titles to their content")
-}).describe("The complete content of a section");
+}).strict().required().describe("The complete content of a section");
 
 export const SectionPlanSchema = z.object({
   sections: z.array(z.object({
@@ -58,8 +58,8 @@ export const SectionPlanSchema = z.object({
     name: z.string().describe("The section name"),
     description: z.string().describe("The section description"),
     subsection_titles: z.array(z.string()).describe("List of subsection titles")
-  }))
-}).describe("The complete plan for all sections");
+  }).strict().required())
+}).strict().required().describe("The complete plan for all sections");
 
 export type SectionContent = z.infer<typeof SectionContentSchema>;
 export type SectionPlanResponse = z.infer<typeof SectionPlanSchema>;

@@ -9,7 +9,9 @@ import {
   FeedbackRequest,
   ResearchEvent,
   ErrorEvent,
-  Section
+  Section,
+  ResearchState,
+  ResearchConfig
 } from '../types/research';
 
 const researchService = new ResearchService();
@@ -21,6 +23,11 @@ interface UseResearchReturn {
   currentSessionId: string | null;
   startResearch: (request: ResearchRequest) => Promise<void>;
   provideFeedback: (feedback: string) => Promise<void>;
+  getSession: (sessionId: string) => { 
+    state: ResearchState;
+    config: ResearchConfig;
+    events: ResearchEvent[];
+  } | undefined;
 }
 
 export function useResearch(): UseResearchReturn {
@@ -122,6 +129,7 @@ export function useResearch(): UseResearchReturn {
     sections,
     currentSessionId,
     startResearch,
-    provideFeedback
+    provideFeedback,
+    getSession
   };
 } 

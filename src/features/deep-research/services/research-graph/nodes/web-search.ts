@@ -1,17 +1,28 @@
+import { ChatOpenAI } from '@langchain/openai';
 import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { PromptTemplate } from '@langchain/core/prompts';
-import { StringOutputParser } from '@langchain/core/output_parsers';
+import { JsonOutputParser } from '@langchain/core/output_parsers';
 import { ResearchState } from '../../../types/research';
-import { ChatOpenAI } from '@langchain/openai';
 import { config } from '../../../config';
 
-const SEARCH_QUERY_TEMPLATE = `Given the section to research:
+interface QueryResult {
+  query: string;
+  purpose: string;
+}
+
+const SEARCH_QUERY_TEMPLATE = `You are an expert teacher crafting targeted web search queries that will gather comprehensive information for writing a detailed lesson for one section of a learning roadmap.:
+
+Section Information:
 Title: {sectionTitle}
 Description: {sectionDescription}
 Subsections: {subsectionTitles}
 
-Your goal is to generate {numberOfQueries} search queries that will help gather comprehensive information for writing this section.
+Generate {numberOfQueries} search queries that will help gather comprehensive information for writing this section.
+
+Format the response as a JSON array of queries, where each query has:
+- query: string
+- purpose: string
 
 Requirements:
 1. Cover different aspects of the topic (e.g., core features, real-world applications, technical architecture)
@@ -19,21 +30,15 @@ Requirements:
 3. Target recent information by including year markers where relevant (e.g., "2024")
 4. Look for comparisons or differentiators from similar technologies/approaches
 5. Search for both official documentation and practical implementation examples
-6. Address each subsection title specifically to ensure comprehensive coverage
-
-Your queries should be:
-- Specific enough to avoid generic results
-- Technical enough to capture detailed implementation information
-- Diverse enough to cover all aspects of the section plan and subsections
-- Focused on authoritative sources (documentation, technical blogs, academic papers)`;
+6. Address each subsection title specifically to ensure comprehensive coverage`;
 
 export function webSearchNode(searchTool: TavilySearchResults) {
   const queryPrompt = PromptTemplate.fromTemplate(SEARCH_QUERY_TEMPLATE);
-  const stringParser = new StringOutputParser();
+  const jsonParser = new JsonOutputParser<QueryResult[]>();
   
   // Initialize a model for query generation
   const queryModel = new ChatOpenAI({
-    modelName: "gpt-3.5-turbo",
+    modelName: "gpt-4",
     temperature: 0.7,
     apiKey: config.openai.apiKey
   });
@@ -52,53 +57,87 @@ export function webSearchNode(searchTool: TavilySearchResults) {
       return {
         sectionTitle: nextSection.title,
         sectionDescription: nextSection.description,
+        subsectionTitles: nextSection.subsectionTitles.join(', '),
+        numberOfQueries: 3,
         section: nextSection
       };
     },
-    // Generate search query
+    // Generate search queries
     async (input) => {
       try {
-        const queryChain = queryPrompt.pipe(queryModel).pipe(stringParser);
-        const query = await queryChain.invoke(input);
+        const queryChain = queryPrompt.pipe(queryModel).pipe(jsonParser);
+        const queries = await queryChain.invoke(input);
         
-        if (!query) {
-          throw new Error('Generated search query is empty');
+        if (!queries || !queries.length) {
+          throw new Error('Generated search queries are empty');
         }
 
-        console.log('Generated search query:', query);
+        console.log('Generated search queries:', queries);
 
         return {
           ...input,
-          query
+          queries: queries.map(q => q.query)
         };
       } catch (error) {
-        throw new Error(`Failed to generate search query: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        throw new Error(`Failed to generate search queries: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     },
     // Perform search
     async (input) => {
       try {
-        if (!input.query) {
-          throw new Error('Search query is required');
+        if (!input.queries || !input.queries.length) {
+          throw new Error('Search queries are required');
         }
 
-        console.log('Executing Tavily search with query:', input.query);
-        const results = await searchTool.invoke(input.query);
+        console.log('Executing Tavily searches...');
+        const searchPromises = input.queries.map((query: string) => 
+          searchTool.invoke(query)
+        );
         
-        if (!results || !Array.isArray(results)) {
-          console.error('Invalid search results format:', results);
-          throw new Error('Invalid search results format returned');
+        const results = await Promise.all(searchPromises);
+        
+        if (!results || !results.length) {
+          throw new Error('No search results returned');
         }
 
-        if (results.length === 0) {
-          console.warn('No search results found for query:', input.query);
-        } else {
-          console.log(`Found ${results.length} search results`);
+        // Parse and combine all search results
+        const allResults = results.flatMap(resultStr => {
+          try {
+            if (Array.isArray(resultStr) && resultStr.length > 0 && typeof resultStr[0] === 'object') {
+              return resultStr;
+            }
+            if (typeof resultStr === 'string') {
+              return JSON.parse(resultStr);
+            }
+            console.warn('Unexpected result format:', resultStr);
+            return [];
+          } catch (error) {
+            console.warn('Failed to parse search result:', error);
+            return [];
+          }
+        });
+
+        // Filter valid results
+        const validResults = allResults.filter(result => 
+          result && 
+          typeof result === 'object' && 
+          typeof result.title === 'string' && result.title.trim() &&
+          typeof result.content === 'string' && result.content.trim() &&
+          typeof result.url === 'string' && result.url.trim()
+        );
+
+        if (!validResults.length) {
+          throw new Error('No valid search results found after parsing');
         }
+
+        // Format results into source string
+        const sourceStr = validResults
+          .map(result => `Source: ${result.title.trim()}\n${result.content.trim()}\nURL: ${result.url.trim()}`)
+          .join('\n\n');
 
         return {
           section: input.section,
-          searchResults: results
+          sourceStr
         };
       } catch (error) {
         console.error('Search error:', error);
@@ -115,14 +154,6 @@ export function webSearchNode(searchTool: TavilySearchResults) {
         
         throw new Error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
-    },
-    // Update state
-    async (result): Promise<Partial<ResearchState>> => {
-      return {
-        section: result.section,
-        sourceStr: JSON.stringify(result.searchResults),
-        searchIterations: 1
-      };
     }
   ]);
 } 
