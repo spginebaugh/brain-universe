@@ -101,6 +101,7 @@ const ResearchSection: React.FC<{ section: Section; isCompleted: boolean }> = ({
 
 export function ResearchProgress() {
   const [query, setQuery] = useState('');
+  const [numberOfSections, setNumberOfSections] = useState(6);
   const { isLoading, error, currentSessionId, getSession, startResearch, loadExample } = useResearchWithExample();
   
   // Get completedSections directly from the session state
@@ -116,7 +117,7 @@ export function ResearchProgress() {
     console.log('Starting research with query:', query); // Debug log
     await startResearch({
       query: query.trim(),
-      numberOfMainSections: 6
+      numberOfMainSections: numberOfSections
     });
   };
 
@@ -131,26 +132,46 @@ export function ResearchProgress() {
           Enter a topic or question to start comprehensive research.
         </p>
         
-        <div className="flex gap-2">
-          <form onSubmit={handleSubmit} className="flex gap-2 flex-1">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="e.g., 'What are the implications of quantum computing on cryptography?'"
-              disabled={isLoading}
-              className="flex-1"
-            />
-            <Button type="submit" disabled={isLoading || !query.trim()}>
-              {isLoading ? 'Researching...' : 'Start Research'}
+        <div className="space-y-4">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <label htmlFor="sections" className="block text-sm font-medium text-gray-700 mb-1">
+                Number of Main Sections
+              </label>
+              <Input
+                id="sections"
+                type="number"
+                min={1}
+                max={10}
+                value={numberOfSections}
+                onChange={(e) => setNumberOfSections(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                disabled={isLoading}
+                className="w-32"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <form onSubmit={handleSubmit} className="flex gap-2 flex-1">
+              <Input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="e.g., 'What are the implications of quantum computing on cryptography?'"
+                disabled={isLoading}
+                className="flex-1"
+              />
+              <Button type="submit" disabled={isLoading || !query.trim()}>
+                {isLoading ? 'Researching...' : 'Start Research'}
+              </Button>
+            </form>
+            <Button 
+              variant="outline" 
+              onClick={loadExample}
+              className="whitespace-nowrap"
+            >
+              Load Example
             </Button>
-          </form>
-          <Button 
-            variant="outline" 
-            onClick={loadExample}
-            className="whitespace-nowrap"
-          >
-            Load Example
-          </Button>
+          </div>
         </div>
 
         {error && (
