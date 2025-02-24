@@ -1,12 +1,15 @@
 "use client";
 
 import { create } from 'zustand';
-import { ResearchState, ResearchConfig, ResearchEvent } from '../types/research';
+import { ResearchState, ResearchConfig, ResearchEvent, ResearchStep } from '../types/research';
 
 interface ResearchSession {
   state: ResearchState;
   config: ResearchConfig;
   events: ResearchEvent[];
+  currentStep?: ResearchStep;
+  isComplete: boolean;
+  completedAt?: Date;
 }
 
 interface ResearchStore {
@@ -26,7 +29,11 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
   addSession: (id, session) => {
     console.log('Adding session:', id, session);
     set((state) => ({
-      sessions: new Map(state.sessions).set(id, session)
+      sessions: new Map(state.sessions).set(id, {
+        ...session,
+        isComplete: false,
+        currentStep: undefined
+      })
     }));
   },
     
@@ -60,6 +67,9 @@ export const useResearchStore = create<ResearchStore>((set, get) => ({
         const updatedSession = {
           ...session,
           events: [...session.events, event],
+          currentStep: event.step,
+          isComplete: event.isFinalOutput || false,
+          completedAt: event.isFinalOutput ? new Date() : session.completedAt,
           state: {
             ...session.state,
             completedSections: event.type === 'progress' ? event.sections : session.state.completedSections

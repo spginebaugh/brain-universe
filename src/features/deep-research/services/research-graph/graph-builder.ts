@@ -1,38 +1,21 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
-import { ResearchConfig, Section } from '../../types/research';
+import { ResearchConfig, ResearchState, RESEARCH_STEPS, StepResult } from '../../types/research';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
 import { JsonOutputParser } from '@langchain/core/output_parsers';
 
 // Node implementations will be imported from separate files
+import { planWebSearchNode } from './nodes/plan-web-search';
 import { generatePlanNode } from './nodes/generate-plan';
-import { webSearchNode } from './nodes/web-search';
+import { sectionWebSearchNode } from './nodes/section-web-search';
 import { writeSectionNode } from './nodes/write-section';
 
-// Define state interface
-export interface ResearchState {
-  topic: string;
-  numberOfMainSections: number;
-  sections: Section[];
-  section: Section | null;
-  searchIterations: number;
-  searchQueries: string[];
-  sourceStr: string;
-  completedSections: Section[];
-  reportSectionsFromResearch: string;
-}
-
 export interface ResearchGraph {
-  stream: (initialState: Partial<ResearchState>) => AsyncGenerator<Partial<ResearchState>, void, unknown>;
+  stream: (initialState: Partial<ResearchState>) => AsyncGenerator<StepResult, void, unknown>;
 }
 
 interface GraphBuilderOptions {
   callbacks?: BaseCallbackHandler[];
-}
-
-interface ResearchResult extends Partial<ResearchState> {
-  content?: unknown;
-  additionalData?: Record<string, unknown>;
 }
 
 export function buildResearchGraph(
@@ -65,13 +48,13 @@ export function buildResearchGraph(
   });
 
   // Create node instances
-  const planNode = generatePlanNode(plannerModel, searchTool);
-  const researchNode = webSearchNode(searchTool);
+  const planSearchNode = planWebSearchNode(plannerModel, searchTool);
+  const planNode = generatePlanNode(plannerModel);
+  const researchNode = sectionWebSearchNode(searchTool);
   const writeNode = writeSectionNode(writerModel);
 
   return {
     async *stream(initialState: Partial<ResearchState>) {
-      // Initialize state with defaults
       let state: ResearchState = {
         topic: initialState.topic || '',
         numberOfMainSections: initialState.numberOfMainSections || 0,
@@ -81,38 +64,83 @@ export function buildResearchGraph(
         searchQueries: initialState.searchQueries || [],
         sourceStr: initialState.sourceStr || '',
         completedSections: initialState.completedSections || [],
-        reportSectionsFromResearch: initialState.reportSectionsFromResearch || ''
+        reportSectionsFromResearch: initialState.reportSectionsFromResearch || '',
+        researchResults: initialState.researchResults || []
       };
 
       try {
-        // Start with planning if no sections exist
+        // Initial Query Research phase
         if (!state.sections.length) {
-          const planResult = await planNode.invoke(state, { callbacks }) as ResearchResult;
-          if (planResult.content && typeof planResult.content === 'string') {
-            planResult.content = await jsonParser.invoke(planResult.content);
+          const planSearchResult = await planSearchNode.invoke(state, { callbacks }) as Partial<StepResult> & {
+            results?: Array<{ title: string; content: string; url: string; }>;
+          };
+          const queryResearchResult: StepResult = {
+            step: RESEARCH_STEPS.QUERY_RESEARCH,
+            isComplete: true,
+            isFinalOutput: false,
+            content: planSearchResult.content
+          };
+          yield queryResearchResult;
+          
+          // Ensure researchResults is defined before planning phase
+          const researchResults = planSearchResult.results || [];
+          state = { ...state, researchResults };
+
+          // Planning phase
+          const planResult = await planNode.invoke(state, { callbacks }) as Partial<StepResult>;
+          const enhancedPlanResult: StepResult = {
+            ...planResult,
+            step: RESEARCH_STEPS.PLANNING,
+            isComplete: true,
+            isFinalOutput: false
+          };
+          if (enhancedPlanResult.content && typeof enhancedPlanResult.content === 'string') {
+            enhancedPlanResult.content = await jsonParser.invoke(enhancedPlanResult.content);
           }
-          yield planResult;
+          yield enhancedPlanResult;
           state = { ...state, ...planResult };
         }
 
-        // Continue research and writing until all sections are completed
+        // Research and writing loop
         while (state.completedSections.length < state.numberOfMainSections) {
           // Research phase
-          const researchResult = await researchNode.invoke(state, { callbacks }) as ResearchResult;
-          if (researchResult.content && typeof researchResult.content === 'string') {
-            researchResult.content = await jsonParser.invoke(researchResult.content);
+          const researchResult = await researchNode.invoke(state, { callbacks }) as Partial<StepResult>;
+          const enhancedResearchResult: StepResult = {
+            ...researchResult,
+            step: RESEARCH_STEPS.RESEARCH,
+            isComplete: true,
+            isFinalOutput: false
+          };
+          if (enhancedResearchResult.content && typeof enhancedResearchResult.content === 'string') {
+            enhancedResearchResult.content = await jsonParser.invoke(enhancedResearchResult.content);
           }
-          yield researchResult;
+          yield enhancedResearchResult;
           state = { ...state, ...researchResult };
 
           // Writing phase
-          const writeResult = await writeNode.invoke(state, { callbacks }) as ResearchResult;
-          if (writeResult.content && typeof writeResult.content === 'string') {
-            writeResult.content = await jsonParser.invoke(writeResult.content);
+          const writeResult = await writeNode.invoke(state, { callbacks }) as Partial<StepResult>;
+          const enhancedWriteResult: StepResult = {
+            ...writeResult,
+            step: RESEARCH_STEPS.WRITING,
+            isComplete: true,
+            isFinalOutput: false
+          };
+          if (enhancedWriteResult.content && typeof enhancedWriteResult.content === 'string') {
+            enhancedWriteResult.content = await jsonParser.invoke(enhancedWriteResult.content);
           }
-          yield writeResult;
+          yield enhancedWriteResult;
           state = { ...state, ...writeResult };
         }
+
+        // Yield final completion event
+        const finalResult: StepResult = {
+          step: RESEARCH_STEPS.COMPLETE,
+          isComplete: true,
+          isFinalOutput: true,
+          content: state.completedSections
+        };
+        yield finalResult;
+
       } catch (error) {
         console.error('Error in research graph:', error);
         throw error;

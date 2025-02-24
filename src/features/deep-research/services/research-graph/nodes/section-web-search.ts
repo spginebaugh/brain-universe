@@ -5,11 +5,7 @@ import { PromptTemplate } from '@langchain/core/prompts';
 import { JsonOutputParser } from '@langchain/core/output_parsers';
 import { ResearchState } from '../../../types/research';
 import { config } from '../../../config';
-
-interface QueryResult {
-  query: string;
-  purpose: string;
-}
+import { QueryResult, SearchOutput } from '../../../types/parser-types';
 
 const SEARCH_QUERY_TEMPLATE = `You are an expert teacher crafting targeted web search queries that will gather comprehensive information for writing a detailed lesson for one section of a learning roadmap.:
 
@@ -32,9 +28,9 @@ Requirements:
 5. Search for both official documentation and practical implementation examples
 6. Address each subsection title specifically to ensure comprehensive coverage`;
 
-export function webSearchNode(searchTool: TavilySearchResults) {
+export function sectionWebSearchNode(searchTool: TavilySearchResults) {
   const queryPrompt = PromptTemplate.fromTemplate(SEARCH_QUERY_TEMPLATE);
-  const jsonParser = new JsonOutputParser<QueryResult[]>();
+  const queryJsonParser = new JsonOutputParser<QueryResult[]>();
   
   // Initialize a model for query generation
   const queryModel = new ChatOpenAI({
@@ -65,14 +61,12 @@ export function webSearchNode(searchTool: TavilySearchResults) {
     // Generate search queries
     async (input) => {
       try {
-        const queryChain = queryPrompt.pipe(queryModel).pipe(jsonParser);
+        const queryChain = queryPrompt.pipe(queryModel).pipe(queryJsonParser);
         const queries = await queryChain.invoke(input);
         
         if (!queries || !queries.length) {
           throw new Error('Generated search queries are empty');
         }
-
-        console.log('Generated search queries:', queries);
 
         return {
           ...input,
@@ -89,7 +83,6 @@ export function webSearchNode(searchTool: TavilySearchResults) {
           throw new Error('Search queries are required');
         }
 
-        console.log('Executing Tavily searches...');
         const searchPromises = input.queries.map((query: string) => 
           searchTool.invoke(query)
         );
@@ -100,7 +93,6 @@ export function webSearchNode(searchTool: TavilySearchResults) {
           throw new Error('No search results returned');
         }
 
-        // Parse and combine all search results
         const allResults = results.flatMap(resultStr => {
           try {
             if (Array.isArray(resultStr) && resultStr.length > 0 && typeof resultStr[0] === 'object') {
@@ -109,7 +101,6 @@ export function webSearchNode(searchTool: TavilySearchResults) {
             if (typeof resultStr === 'string') {
               return JSON.parse(resultStr);
             }
-            console.warn('Unexpected result format:', resultStr);
             return [];
           } catch (error) {
             console.warn('Failed to parse search result:', error);
@@ -117,7 +108,6 @@ export function webSearchNode(searchTool: TavilySearchResults) {
           }
         });
 
-        // Filter valid results
         const validResults = allResults.filter(result => 
           result && 
           typeof result === 'object' && 
@@ -130,14 +120,23 @@ export function webSearchNode(searchTool: TavilySearchResults) {
           throw new Error('No valid search results found after parsing');
         }
 
-        // Format results into source string
         const sourceStr = validResults
           .map(result => `Source: ${result.title.trim()}\n${result.content.trim()}\nURL: ${result.url.trim()}`)
           .join('\n\n');
 
+        const searchOutput: SearchOutput = {
+          queries: input.queries,
+          searchResults: validResults.map(result => ({
+            title: result.title.trim(),
+            content: result.content.trim(),
+            url: result.url.trim()
+          }))
+        };
+
         return {
           section: input.section,
-          sourceStr
+          sourceStr,
+          content: JSON.stringify(searchOutput)
         };
       } catch (error) {
         console.error('Search error:', error);

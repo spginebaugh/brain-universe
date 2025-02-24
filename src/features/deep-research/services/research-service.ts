@@ -10,7 +10,12 @@ import {
   ResearchEvent,
   ProgressEvent,
   ErrorEvent,
-  Section
+  Section,
+  RESEARCH_STEPS,
+  ResearchStep,
+  ResearchStepInfo,
+  StepResult,
+  SectionContent
 } from '../types/research';
 
 export class ResearchService {
@@ -54,62 +59,146 @@ export class ResearchService {
     return session;
   }
 
+  private getActionForStep(step: ResearchStep): string {
+    if (step === RESEARCH_STEPS.COMPLETE) {
+      return 'Finalizing research';
+    }
+    switch (step) {
+      case RESEARCH_STEPS.PLANNING:
+        return 'Planning sections';
+      case RESEARCH_STEPS.RESEARCH:
+        return 'Gathering information';
+      case RESEARCH_STEPS.WRITING:
+        return 'Writing content';
+      default:
+        return 'Processing';
+    }
+  }
+
+  private getThoughtForStep(step: ResearchStep, sections: Section[]): string {
+    if (step === RESEARCH_STEPS.COMPLETE) {
+      return 'Research process completed';
+    }
+    return `Processing ${sections.length} section(s)`;
+  }
+
+  private getObservationForStep(step: ResearchStep, sections: Section[]): string {
+    if (step === RESEARCH_STEPS.COMPLETE) {
+      return `Research completed with ${sections.length} total sections`;
+    }
+    return `Generated content for ${sections.length} section(s)`;
+  }
+
   private processEvent(event: unknown, sessionId: string): ResearchEvent {
     console.log('Processing event:', event);
     
     if (typeof event === 'object' && event !== null) {
-      const eventObj = event as Record<string, unknown>;
+      const stepResult = event as StepResult;
+      
+      // Handle step information
+      const step = stepResult.step || RESEARCH_STEPS.RESEARCH;
+      const isProcessComplete = stepResult.isComplete || false;
+      const isFinalOutput = stepResult.isFinalOutput || false;
 
-      if ('error' in eventObj) {
+      if ('error' in stepResult) {
         return {
           type: 'error',
           sessionId,
-          error: String(eventObj.error)
+          step,
+          isProcessComplete,
+          isFinalOutput,
+          error: String(stepResult.error)
         } as ErrorEvent;
       }
 
-      // Process sections - check for completedSections first
+      // Process sections based on step type
       let sections: Section[] = [];
-      
-      if ('completedSections' in eventObj && Array.isArray(eventObj.completedSections)) {
-        sections = eventObj.completedSections as Section[];
-      } else {
-        // Fallback to other section fields if completedSections is not present
-        if ('sections' in eventObj && Array.isArray(eventObj.sections)) {
-          sections.push(...eventObj.sections as Section[]);
+      let content = stepResult.content;
+
+      try {
+        // Parse content if it's a string
+        if (typeof content === 'string') {
+          content = JSON.parse(content);
         }
-        if ('section' in eventObj && typeof eventObj.section === 'object' && eventObj.section !== null) {
-          sections.push(eventObj.section as Section);
+      } catch (e) {
+        console.warn('Failed to parse content:', e);
+        content = { rawContent: content };
+      }
+
+      if (step === RESEARCH_STEPS.QUERY_RESEARCH) {
+        sections = [];  // No sections for query research
+      }
+      else if (step === RESEARCH_STEPS.PLANNING) {
+        if ('sections' in stepResult) {
+          sections = (stepResult.sections as Section[]).map(section => ({
+            ...section,
+            step: RESEARCH_STEPS.PLANNING,
+            status: 'in_progress' as const
+          }));
+        }
+      } 
+      else if (step === RESEARCH_STEPS.RESEARCH) {
+        if ('section' in stepResult) {
+          sections = [{
+            ...(stepResult.section as Section),
+            step: RESEARCH_STEPS.RESEARCH,
+            status: 'in_progress' as const,
+            content: content as string | SectionContent // Type assertion for content
+          }];
+        }
+      } 
+      else if (step === RESEARCH_STEPS.WRITING) {
+        if ('section' in stepResult) {
+          sections = [{
+            ...(stepResult.section as Section),
+            step: RESEARCH_STEPS.WRITING,
+            status: 'done' as const,
+            content: content as string | SectionContent // Type assertion for content
+          }];
+        }
+      } 
+      else if (step === RESEARCH_STEPS.COMPLETE) {
+        if ('completedSections' in stepResult) {
+          sections = (stepResult.completedSections as Section[]).map(section => ({
+            ...section,
+            step: RESEARCH_STEPS.COMPLETE,
+            status: 'done' as const
+          }));
         }
       }
 
-      console.log('Processed sections:', sections);
+      const steps: ResearchStepInfo[] = [{
+        action: this.getActionForStep(step),
+        thought: this.getThoughtForStep(step, sections),
+        observation: this.getObservationForStep(step, sections)
+      }];
 
-      if (sections.length > 0) {
-        const progressEvent: ProgressEvent = {
-          type: 'progress',
-          sessionId,
-          content: null,
-          sections,
-          steps: [{
-            agentName: sections.length > 1 ? 'Report Planner' : 'Section Writer',
-            thought: `Processing ${sections.length} section(s)`,
-            action: sections.length > 1 ? 'Planning sections' : 'Writing content',
-            observation: `Generated content for ${sections.length} section(s)`
-          }]
-        };
-        console.log('Created progress event:', progressEvent);
-        return progressEvent;
-      }
+      return {
+        type: 'progress',
+        sessionId,
+        step,
+        isProcessComplete,
+        isFinalOutput,
+        content, // Pass through the parsed content
+        sections,
+        steps
+      } as ProgressEvent;
     }
 
-    // Default progress event
+    // Default progress event for unknown event types
     return {
       type: 'progress',
       sessionId,
+      step: RESEARCH_STEPS.RESEARCH,
+      isProcessComplete: false,
+      isFinalOutput: false,
       content: String(event),
       sections: [],
-      steps: []
+      steps: [{
+        action: this.getActionForStep(RESEARCH_STEPS.RESEARCH),
+        thought: 'Processing unknown event',
+        observation: 'Received unknown event type'
+      }]
     } as ProgressEvent;
   }
 
@@ -141,6 +230,9 @@ export class ResearchService {
       const errorEvent: ErrorEvent = {
         type: 'error',
         sessionId,
+        step: RESEARCH_STEPS.COMPLETE,
+        isProcessComplete: true,
+        isFinalOutput: true,
         error: e.message
       };
       useResearchStore.getState().addEvent(sessionId, errorEvent);

@@ -34,19 +34,36 @@ export interface Section {
   description: string;
   subsectionTitles: string[];
   content?: string | SectionContent;
+  step?: ResearchStep;
+  timestamp?: string;
+  status: 'pending' | 'in_progress' | 'done';
 }
+
+// Step types
+export const RESEARCH_STEPS = {
+  QUERY_RESEARCH: 'QUERY_RESEARCH',
+  PLANNING: 'PLANNING',
+  RESEARCH: 'RESEARCH',
+  WRITING: 'WRITING',
+  COMPLETE: 'COMPLETE'
+} as const;
+
+export type ResearchStep = typeof RESEARCH_STEPS[keyof typeof RESEARCH_STEPS];
 
 // Event types
 export interface BaseEvent {
   type: string;
   sessionId: string;
+  step: ResearchStep;
+  isProcessComplete?: boolean;
+  isFinalOutput?: boolean;
 }
 
 export interface ProgressEvent extends BaseEvent {
   type: 'progress';
   content: string | null;
   sections: Section[];
-  steps: ResearchStep[];
+  steps: ResearchStepInfo[];
 }
 
 export interface ErrorEvent extends BaseEvent {
@@ -61,11 +78,19 @@ export interface InterruptEvent extends BaseEvent {
   requiresFeedback: boolean;
 }
 
-export interface ResearchStep {
-  agentName: string;
-  thought: string;
+// Rename old ResearchStep to ResearchStepInfo to avoid naming conflict
+export interface ResearchStepInfo {
   action: string;
+  thought: string;
   observation: string;
+}
+
+export interface StepResult extends Partial<ResearchState> {
+  step: ResearchStep;
+  isComplete: boolean;
+  isFinalOutput?: boolean;
+  content?: unknown;
+  additionalData?: Record<string, unknown>;
 }
 
 // Zod schemas for validation
@@ -92,6 +117,11 @@ export interface ResearchState {
   sourceStr: string;
   completedSections: Section[];
   reportSectionsFromResearch: string;
+  researchResults?: Array<{
+    title: string;
+    content: string;
+    url: string;
+  }>;
 }
 
 export interface ResearchConfig {

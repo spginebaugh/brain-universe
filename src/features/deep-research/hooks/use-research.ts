@@ -11,7 +11,9 @@ import {
   Section,
   ResearchState,
   ResearchConfig,
-  ProgressEvent
+  ProgressEvent,
+  RESEARCH_STEPS,
+  ResearchStep
 } from '../types/research';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -38,7 +40,7 @@ export function useResearch(): UseResearchReturn {
   const { addSession, addEvent, getSession, updateSession } = useResearchStore();
 
   const handleEvent = useCallback((event: ResearchEvent, sessionId: string) => {
-    console.log('Received event:', event); // Debug log
+    console.log('Received event:', event);
 
     addEvent(sessionId, event);
 
@@ -48,24 +50,64 @@ export function useResearch(): UseResearchReturn {
       setIsLoading(false);
     } else if (event.type === 'progress') {
       const progressEvent = event as ProgressEvent;
-      console.log('Progress event sections:', progressEvent.sections); // Debug log
+      console.log('Progress event sections:', progressEvent.sections);
       
       if (progressEvent.sections.length > 0) {
         const session = getSession(sessionId);
-        console.log('Current session:', session); // Debug log
+        console.log('Current session:', session);
         
         if (session) {
-          // Directly add all sections to completedSections
+          // Get existing sections that aren't being updated
+          const existingSections = session.state.completedSections.filter(
+            existingSection => !progressEvent.sections.some(
+              newSection => newSection.title === existingSection.title
+            )
+          );
+
+          // Combine existing sections with new ones
+          const updatedSections = [
+            ...existingSections,
+            ...progressEvent.sections.map(section => ({
+              ...section,
+              step: progressEvent.step,
+              timestamp: new Date().toISOString(),
+              // Set status based on the step
+              status: progressEvent.step === RESEARCH_STEPS.WRITING || 
+                     progressEvent.step === RESEARCH_STEPS.COMPLETE ? 
+                     'done' as const : 'in_progress' as const
+            }))
+          ];
+
+          // Sort sections to maintain consistent order
+          updatedSections.sort((a, b) => {
+            const stepOrder: Record<ResearchStep, number> = {
+              [RESEARCH_STEPS.PLANNING]: 0,
+              [RESEARCH_STEPS.RESEARCH]: 1,
+              [RESEARCH_STEPS.WRITING]: 2,
+              [RESEARCH_STEPS.COMPLETE]: 3
+            };
+            const aStep = a.step || RESEARCH_STEPS.RESEARCH;
+            const bStep = b.step || RESEARCH_STEPS.RESEARCH;
+            return stepOrder[aStep] - stepOrder[bStep];
+          });
+
           updateSession(sessionId, {
             ...session,
             state: {
               ...session.state,
-              completedSections: progressEvent.sections
-            }
+              completedSections: updatedSections
+            },
+            isComplete: progressEvent.isFinalOutput || false,
+            currentStep: progressEvent.step
           });
           
-          console.log('Updated session:', getSession(sessionId)); // Debug log
+          console.log('Updated session:', getSession(sessionId));
         }
+      }
+
+      // Only set loading to false when we receive the final output
+      if (progressEvent.isFinalOutput) {
+        setIsLoading(false);
       }
     }
   }, [addEvent, getSession, updateSession]);
@@ -101,7 +143,9 @@ export function useResearch(): UseResearchReturn {
           tavily: config.tavily,
           langsmith: config.langsmith
         },
-        events: []
+        events: [],
+        isComplete: false,
+        currentStep: undefined
       });
       setCurrentSessionId(sessionId);
 
