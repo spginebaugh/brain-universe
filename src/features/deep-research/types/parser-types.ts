@@ -1,3 +1,5 @@
+import { SearchQuery, SearchResult } from './research';
+
 export interface PlanOutput {
   outline: {
     sections: Array<{
@@ -8,24 +10,17 @@ export interface PlanOutput {
   };
   research: {
     queries: string[];
-    results: Array<{
-      title: string;
-      content: string;
-      url: string;
-    }>;
+    results: SearchResult[];
   };
 }
 
 export interface SearchOutput {
-  queries: string[];
-  searchResults: Array<{
-    title: string;
-    content: string;
-    url: string;
-  }>;
+  queries: SearchQuery[];
+  results: SearchResult[];
 }
 
 export interface QueryResult {
   query: string;
   purpose: string;
+  targetSubTopic?: string;
 } 

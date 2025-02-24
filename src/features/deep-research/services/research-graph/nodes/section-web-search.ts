@@ -7,14 +7,14 @@ import { ResearchState } from '../../../types/research';
 import { config } from '../../../config';
 import { QueryResult, SearchOutput } from '../../../types/parser-types';
 
-const SEARCH_QUERY_TEMPLATE = `You are an expert teacher crafting targeted web search queries that will gather comprehensive information for writing a detailed lesson for one section of a learning roadmap.:
+const SEARCH_QUERY_TEMPLATE = `You are an expert teacher crafting targeted web search queries that will gather comprehensive information for writing a detailed lesson for one chapter of a learning roadmap.:
 
-Section Information:
-Title: {sectionTitle}
-Description: {sectionDescription}
-Subsections: {subsectionTitles}
+Chapter Information:
+Title: {chapterTitle}
+Description: {chapterDescription}
+SubTopics: {subTopicNames}
 
-Generate {numberOfQueries} search queries that will help gather comprehensive information for writing this section.
+Generate {numberOfQueries} search queries that will help gather comprehensive information for writing this chapter.
 
 Format the response as a JSON array of queries, where each query has:
 - query: string
@@ -26,7 +26,7 @@ Requirements:
 3. Target recent information by including year markers where relevant (e.g., "2025")
 4. Look for comparisons or differentiators from similar technologies/approaches
 5. Search for both official documentation and practical implementation examples
-6. Address each subsection title specifically to ensure comprehensive coverage`;
+6. Address each sub-topic name specifically to ensure comprehensive coverage`;
 
 export function sectionWebSearchNode(searchTool: TavilySearchResults) {
   const queryPrompt = PromptTemplate.fromTemplate(SEARCH_QUERY_TEMPLATE);
@@ -40,22 +40,26 @@ export function sectionWebSearchNode(searchTool: TavilySearchResults) {
   });
 
   return RunnableSequence.from([
-    // Extract section to research
+    // Extract chapter to research
     (state: ResearchState) => {
-      const nextSection = state.sections.find(s => 
-        !state.completedSections.some(cs => cs.title === s.title)
+      // Find a chapter that hasn't been processed yet
+      const nextChapter = state.plannedChapters.find(c => 
+        !state.chapters[c.title] || state.chapters[c.title].status === 'pending'
       );
       
-      if (!nextSection) {
-        throw new Error('No sections left to research');
+      if (!nextChapter) {
+        throw new Error('No chapters left to research');
       }
       
+      // Update chapter status to researching
+      nextChapter.status = 'researching';
+      
       return {
-        sectionTitle: nextSection.title,
-        sectionDescription: nextSection.description,
-        subsectionTitles: nextSection.subsectionTitles.join(', '),
+        chapterTitle: nextChapter.title,
+        chapterDescription: nextChapter.description,
+        subTopicNames: nextChapter.subTopicNames.join(', '),
         numberOfQueries: 3,
-        section: nextSection
+        chapter: nextChapter
       };
     },
     // Generate search queries
@@ -126,7 +130,7 @@ export function sectionWebSearchNode(searchTool: TavilySearchResults) {
 
         const searchOutput: SearchOutput = {
           queries: input.queries,
-          searchResults: validResults.map(result => ({
+          results: validResults.map(result => ({
             title: result.title.trim(),
             content: result.content.trim(),
             url: result.url.trim()
@@ -134,7 +138,7 @@ export function sectionWebSearchNode(searchTool: TavilySearchResults) {
         };
 
         return {
-          section: input.section,
+          currentChapter: input.chapter,
           sourceStr,
           content: JSON.stringify(searchOutput)
         };

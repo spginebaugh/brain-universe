@@ -7,7 +7,7 @@ import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
 import { QueryResult } from '../../../types/parser-types';
 
 // Template for generating initial research queries
-const QUERY_GENERATION_TEMPLATE = `You are an expert technical writer helping to plan a learning roadmap.. Generate search queries to gather comprehensive information about: {topic}
+const QUERY_GENERATION_TEMPLATE = `You are an expert technical writer helping to plan a learning roadmap.. Generate search queries to gather comprehensive information about: {researchSubject}
 
 Generate {numberOfQueries} search queries that will help understand:
 1. Core concepts and fundamentals
@@ -34,7 +34,7 @@ export function planWebSearchNode(
   return RunnableSequence.from([
     // 1. Extract initial state
     (state: ResearchState) => ({
-      topic: state.topic,
+      researchSubject: state.researchSubject,
       numberOfQueries: 5 // We can make this configurable if needed
     }),
 
@@ -50,7 +50,7 @@ export function planWebSearchNode(
     },
 
     // 3. Perform web search for each query
-    async (input: { topic: string; queries: string[] }) => {
+    async (input: { researchSubject: string; queries: string[] }) => {
       try {
         const searchPromises = input.queries.map((query: string) => 
           searchTool.invoke(query)

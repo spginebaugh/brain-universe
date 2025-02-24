@@ -1,10 +1,12 @@
 import { ChatOpenAI } from "@langchain/openai";
+import { JsonOutputParser } from "@langchain/core/output_parsers";
 import { AIRoadmapInput, AIRoadmapResponse, RoadmapContent } from "../types/ai-roadmap-types";
 import { roadmapPromptTemplate } from "../utils/prompt-templates";
 import { HumanMessage } from "@langchain/core/messages";
 
 export class AIRoadmapService {
   private model: ChatOpenAI;
+  private parser: JsonOutputParser<RoadmapContent>;
 
   constructor() {
     this.model = new ChatOpenAI({
@@ -13,6 +15,9 @@ export class AIRoadmapService {
       maxTokens: 2500,
       openAIApiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY,
     });
+    
+    // Initialize the JSON parser
+    this.parser = new JsonOutputParser<RoadmapContent>();
   }
 
   public async generateRoadmap(input: AIRoadmapInput): Promise<AIRoadmapResponse> {
@@ -25,18 +30,20 @@ export class AIRoadmapService {
         numberOfTopics: input.numberOfTopics,
       });
 
+      // Add format instructions to the prompt
+      const formatInstructions = this.parser.getFormatInstructions();
+      const promptWithFormat = `${prompt}\n\n${formatInstructions}`;
+
       // Create a message for the chat model
-      const message = new HumanMessage(prompt);
+      const message = new HumanMessage(promptWithFormat);
 
       // Get response from OpenAI
       const response = await this.model.invoke([message]);
 
       try {
-        // Extract the content from the AI response
+        // Use the parser to parse the response
         const responseContent = response.content.toString();
-
-        // Parse the response as JSON
-        const roadmapContent = JSON.parse(responseContent) as RoadmapContent;
+        const roadmapContent = await this.parser.parse(responseContent);
 
         // Validate the response structure
         if (!this.validateRoadmapContent(roadmapContent, input.numberOfTopics)) {

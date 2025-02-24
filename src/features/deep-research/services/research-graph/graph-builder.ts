@@ -1,8 +1,18 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
-import { ResearchConfig, ResearchState, RESEARCH_STEPS, StepResult } from '../../types/research';
+import { 
+  ResearchConfig, 
+  ResearchState, 
+  RESEARCH_PHASES, 
+  PhaseResult,
+  InitialResearchPhaseResult,
+  PlanningPhaseResult,
+  ChapterResearchPhaseResult,
+  ChapterWritingPhaseResult,
+  CompletePhaseResult,
+  Chapter
+} from '../../types/research';
 import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
-import { JsonOutputParser } from '@langchain/core/output_parsers';
 
 // Node implementations will be imported from separate files
 import { planWebSearchNode } from './nodes/plan-web-search';
@@ -11,11 +21,17 @@ import { sectionWebSearchNode } from './nodes/section-web-search';
 import { writeSectionNode } from './nodes/write-section';
 
 export interface ResearchGraph {
-  stream: (initialState: Partial<ResearchState>) => AsyncGenerator<StepResult, void, unknown>;
+  stream: (initialState: ResearchState) => AsyncGenerator<PhaseResult, void, unknown>;
 }
 
 interface GraphBuilderOptions {
   callbacks?: BaseCallbackHandler[];
+}
+
+// Define extended state type for internal use
+interface ExtendedResearchState extends ResearchState {
+  sourceStr?: string;
+  currentChapter?: Chapter;
 }
 
 export function buildResearchGraph(
@@ -23,7 +39,6 @@ export function buildResearchGraph(
   options: GraphBuilderOptions = {}
 ): ResearchGraph {
   const { callbacks } = options;
-  const jsonParser = new JsonOutputParser();
 
   // Initialize models with API keys and callbacks
   const plannerModel = new ChatOpenAI({
@@ -48,97 +63,201 @@ export function buildResearchGraph(
   });
 
   // Create node instances
-  const planSearchNode = planWebSearchNode(plannerModel, searchTool);
+  const initialResearchNode = planWebSearchNode(plannerModel, searchTool);
   const planNode = generatePlanNode(plannerModel);
-  const researchNode = sectionWebSearchNode(searchTool);
-  const writeNode = writeSectionNode(writerModel);
+  const chapterResearchNode = sectionWebSearchNode(searchTool);
+  const chapterWritingNode = writeSectionNode(writerModel);
 
   return {
-    async *stream(initialState: Partial<ResearchState>) {
-      let state: ResearchState = {
-        topic: initialState.topic || '',
-        numberOfMainSections: initialState.numberOfMainSections || 0,
-        sections: initialState.sections || [],
-        section: initialState.section || null,
-        searchIterations: initialState.searchIterations || 0,
-        searchQueries: initialState.searchQueries || [],
-        sourceStr: initialState.sourceStr || '',
-        completedSections: initialState.completedSections || [],
-        reportSectionsFromResearch: initialState.reportSectionsFromResearch || '',
-        researchResults: initialState.researchResults || []
-      };
+    async *stream(initialState: ResearchState) {
+      // Use the provided initial state directly
+      let state: ExtendedResearchState = initialState;
 
       try {
-        // Initial Query Research phase
-        if (!state.sections.length) {
-          const planSearchResult = await planSearchNode.invoke(state, { callbacks }) as Partial<StepResult> & {
-            results?: Array<{ title: string; content: string; url: string; }>;
-          };
-          const queryResearchResult: StepResult = {
-            step: RESEARCH_STEPS.QUERY_RESEARCH,
-            isComplete: true,
-            isFinalOutput: false,
-            content: planSearchResult.content
-          };
-          yield queryResearchResult;
+        // Initial Research phase
+        if (!state.plannedChapters.length) {
+          const initialResearchResult = await initialResearchNode.invoke(state, { callbacks });
           
-          // Ensure researchResults is defined before planning phase
-          const researchResults = planSearchResult.results || [];
-          state = { ...state, researchResults };
+          // Create the phase result
+          const initialResearchPhaseResult: InitialResearchPhaseResult = {
+            phase: RESEARCH_PHASES.INITIAL_RESEARCH,
+            isPhaseComplete: true,
+            isFinalOutput: false,
+            queries: initialResearchResult.queries || [],
+            results: initialResearchResult.results || []
+          };
+          
+          yield initialResearchPhaseResult;
+          
+          // Update state with initial research results
+          state = { 
+            ...state, 
+            initialResearch: {
+              queries: initialResearchPhaseResult.queries,
+              results: initialResearchPhaseResult.results
+            },
+            currentPhase: RESEARCH_PHASES.INITIAL_RESEARCH
+          };
 
           // Planning phase
-          const planResult = await planNode.invoke(state, { callbacks }) as Partial<StepResult>;
-          const enhancedPlanResult: StepResult = {
-            ...planResult,
-            step: RESEARCH_STEPS.PLANNING,
-            isComplete: true,
-            isFinalOutput: false
+          const planResult = await planNode.invoke(state, { callbacks });
+          
+          // Parse planned chapters if needed
+          const plannedChapters = planResult.plannedChapters || [];
+          
+          // Create the phase result
+          const planningPhaseResult: PlanningPhaseResult = {
+            phase: RESEARCH_PHASES.PLANNING,
+            isPhaseComplete: true,
+            isFinalOutput: false,
+            plannedChapters
           };
-          if (enhancedPlanResult.content && typeof enhancedPlanResult.content === 'string') {
-            enhancedPlanResult.content = await jsonParser.invoke(enhancedPlanResult.content);
-          }
-          yield enhancedPlanResult;
-          state = { ...state, ...planResult };
+          
+          yield planningPhaseResult;
+          
+          // Update state with planning results
+          state = { 
+            ...state, 
+            plannedChapters,
+            chapterOrder: plannedChapters.map(chapter => chapter.title),
+            chapters: plannedChapters.reduce((acc, chapter) => {
+              acc[chapter.title] = {
+                ...chapter,
+                phase: RESEARCH_PHASES.PLANNING,
+                timestamp: new Date().toISOString(),
+                status: 'pending'
+              };
+              return acc;
+            }, {} as Record<string, typeof plannedChapters[0]>),
+            currentPhase: RESEARCH_PHASES.PLANNING,
+            progress: {
+              ...state.progress,
+              totalChapters: plannedChapters.length
+            }
+          };
         }
 
-        // Research and writing loop
-        while (state.completedSections.length < state.numberOfMainSections) {
-          // Research phase
-          const researchResult = await researchNode.invoke(state, { callbacks }) as Partial<StepResult>;
-          const enhancedResearchResult: StepResult = {
-            ...researchResult,
-            step: RESEARCH_STEPS.RESEARCH,
-            isComplete: true,
-            isFinalOutput: false
-          };
-          if (enhancedResearchResult.content && typeof enhancedResearchResult.content === 'string') {
-            enhancedResearchResult.content = await jsonParser.invoke(enhancedResearchResult.content);
+        // Chapter research and writing loop
+        while (state.progress.completedChapters < state.progress.totalChapters) {
+          // Find the next chapter to process
+          const nextChapterTitle = state.currentChapterTitle || 
+            state.chapterOrder.find(title => state.chapters[title].status === 'pending');
+          
+          if (!nextChapterTitle) {
+            console.warn('No pending chapters found, but not all chapters are completed');
+            break;
           }
-          yield enhancedResearchResult;
-          state = { ...state, ...researchResult };
+          
+          // Update current chapter
+          state = {
+            ...state,
+            currentChapterTitle: nextChapterTitle
+          };
+          
+          // Chapter Research phase
+          const chapterResearchResult = await chapterResearchNode.invoke(state, { callbacks });
+          
+          // Parse the search results from JSON string
+          const searchOutput = JSON.parse(chapterResearchResult.content);
+          
+          // Extract research data
+          const queries = searchOutput.queries || [];
+          const results = searchOutput.results || [];
+          
+          // Create the phase result
+          const chapterResearchPhaseResult: ChapterResearchPhaseResult = {
+            phase: RESEARCH_PHASES.CHAPTER_RESEARCH,
+            isPhaseComplete: true,
+            isFinalOutput: false,
+            chapterTitle: nextChapterTitle,
+            queries,
+            results
+          };
+          
+          yield chapterResearchPhaseResult;
+          
+          // Update state with research results and prepare for writing phase
+          state = {
+            ...state,
+            chapters: {
+              ...state.chapters,
+              [nextChapterTitle]: {
+                ...state.chapters[nextChapterTitle],
+                phase: RESEARCH_PHASES.CHAPTER_RESEARCH,
+                timestamp: new Date().toISOString(),
+                status: 'researching',
+                research: {
+                  queries,
+                  results
+                }
+              }
+            },
+            currentPhase: RESEARCH_PHASES.CHAPTER_RESEARCH,
+            // Add the source string for the writing phase
+            sourceStr: chapterResearchResult.sourceStr,
+            // Add the current chapter for the writing phase
+            currentChapter: chapterResearchResult.currentChapter
+          };
 
-          // Writing phase
-          const writeResult = await writeNode.invoke(state, { callbacks }) as Partial<StepResult>;
-          const enhancedWriteResult: StepResult = {
-            ...writeResult,
-            step: RESEARCH_STEPS.WRITING,
-            isComplete: true,
-            isFinalOutput: false
-          };
-          if (enhancedWriteResult.content && typeof enhancedWriteResult.content === 'string') {
-            enhancedWriteResult.content = await jsonParser.invoke(enhancedWriteResult.content);
+          // Chapter Writing phase
+          if (!state.currentChapter) {
+            throw new Error('Missing current chapter for writing phase');
           }
-          yield enhancedWriteResult;
-          state = { ...state, ...writeResult };
+          
+          if (!state.sourceStr) {
+            throw new Error('Missing source data for writing phase');
+          }
+          
+          const chapterWritingResult = await chapterWritingNode.invoke(state, { callbacks });
+          
+          // Extract content from the updated state
+          const updatedChapter = chapterWritingResult.chapters[nextChapterTitle];
+          const content = updatedChapter?.content;
+          
+          if (!content) {
+            console.error(`No content generated for chapter "${nextChapterTitle}"`);
+            continue;
+          }
+          
+          // Create the phase result
+          const chapterWritingPhaseResult: ChapterWritingPhaseResult = {
+            phase: RESEARCH_PHASES.CHAPTER_WRITING,
+            isPhaseComplete: true,
+            isFinalOutput: false,
+            chapterTitle: nextChapterTitle,
+            content
+          };
+          
+          yield chapterWritingPhaseResult;
+          
+          // The state is already updated by the writing node, just need to update the phase
+          state = {
+            ...chapterWritingResult,
+            currentPhase: RESEARCH_PHASES.CHAPTER_WRITING
+          };
+          
+          // Clear current chapter if all are completed
+          if (state.progress.completedChapters >= state.progress.totalChapters) {
+            state = {
+              ...state,
+              currentChapterTitle: null
+            };
+          }
         }
 
-        // Yield final completion event
-        const finalResult: StepResult = {
-          step: RESEARCH_STEPS.COMPLETE,
-          isComplete: true,
-          isFinalOutput: true,
-          content: state.completedSections
+        // Complete phase
+        const finalResult: CompletePhaseResult = {
+          phase: RESEARCH_PHASES.COMPLETE,
+          isPhaseComplete: true,
+          isFinalOutput: true
         };
+        
+        // Update state to complete
+        state = {
+          ...state,
+          currentPhase: RESEARCH_PHASES.COMPLETE
+        };
+        
         yield finalResult;
 
       } catch (error) {
