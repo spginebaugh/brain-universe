@@ -1,8 +1,27 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { RunnableSequence, RunnableLambda } from '@langchain/core/runnables';
 import { PromptTemplate } from '@langchain/core/prompts';
-import { JsonOutputParser } from '@langchain/core/output_parsers';
+import { StructuredOutputParser } from '@langchain/core/output_parsers';
+import { z } from 'zod';
 import { ResearchState, Chapter, ChapterContent, RESEARCH_PHASES } from '../../../types/research';
+
+// Define the schema for structured output
+const sourceSchema = z.object({
+  title: z.string().describe("The title of the source"),
+  url: z.string().describe("The URL of the source")
+});
+
+const subTopicSchema = z.object({
+  title: z.string().describe("The title of the sub-topic"),
+  description: z.string().describe("A brief description of the sub-topic"),
+  content: z.string().describe("In-depth lesson content about the sub-topic (at least 1000 words)"),
+  sources: z.array(sourceSchema).describe("At least one relevant source with title and URL")
+});
+
+const chapterContentSchema = z.object({
+  overview: z.string().describe("A 100-150 word overview of the chapter"),
+  subTopics: z.record(z.string(), subTopicSchema).describe("A record of sub-topics, with each key being the sub-topic name")
+});
 
 const WRITE_CHAPTER_TEMPLATE = `You are an expert technical teacher crafting a detailed lesson for one chapter of a learning roadmap.
 
@@ -21,7 +40,7 @@ Write a comprehensive chapter that:
 4. Maintains academic tone and factual accuracy
 
 Each sub-topic must include:
-- The provided sub-topic names
+- The provided sub-topic names as keys in the subTopics object
 - A brief description of the sub-topic
 - Content section. This should be an in-depth lesson about the sub-topic topic (at least 1000 words).
     - Aim for factual accuracy and academic tone
@@ -29,41 +48,9 @@ Each sub-topic must include:
     - Write in a way that will provide readers a deep understanding of the topic
 - At least one relevant source with title and URL
 
-IMPORTANT: Format your response as a valid JSON object with the following structure:
-{{
-  "overview": "string containing 100-150 word overview",
-  "subTopics": {{
-    "subTopicName1": {{
-      "title": "string",
-      "description": "string",
-      "content": "string",
-      "sources": [
-        {{
-          "title": "string",
-          "url": "string"
-        }}
-      ]
-    }},
-    "subTopicName2": {{
-      "title": "string",
-      "description": "string",
-      "content": "string",
-      "sources": [
-        {{
-          "title": "string",
-          "url": "string"
-        }}
-      ]
-    }}
-  }}
-}}
+IMPORTANT: You MUST create a sub-topic entry for EACH of the sub-topic names provided in the list. The list of sub-topic names is: {subTopicNames}
 
-Make sure to:
-1. Use proper JSON syntax with double quotes around all keys and string values
-2. Escape any double quotes within string values using backslash (\\")
-3. Avoid trailing commas
-4. Ensure all opening brackets/braces have matching closing brackets/braces
-5. Do not include any text, markdown, or explanations outside the JSON structure`
+{format_instructions}`;
 
 // Define additional types for internal state management
 interface WriteStateExtension {
@@ -82,8 +69,11 @@ export function writeSectionNode(model: ChatOpenAI) {
     currentState: ExtendedResearchState;
   };
 
-  const prompt = PromptTemplate.fromTemplate<PrepareOutput>(WRITE_CHAPTER_TEMPLATE);
-  const jsonParser = new JsonOutputParser<ChapterContent>();
+  // Create structured output parser
+  const parser = StructuredOutputParser.fromZodSchema(chapterContentSchema);
+  const formatInstructions = parser.getFormatInstructions();
+
+  const prompt = PromptTemplate.fromTemplate<PrepareOutput & { format_instructions: string }>(WRITE_CHAPTER_TEMPLATE);
 
   const prepareData = new RunnableLambda({
     func: (state: ExtendedResearchState) => {
@@ -100,6 +90,7 @@ export function writeSectionNode(model: ChatOpenAI) {
         chapterDescription: state.currentChapter.description,
         subTopicNames: state.currentChapter.subTopicNames.join(', '),
         sourceData: state.sourceStr,
+        format_instructions: formatInstructions,
         currentState: state
       };
     }
@@ -133,18 +124,28 @@ export function writeSectionNode(model: ChatOpenAI) {
         console.warn('Missing or invalid subTopics in chapter content:', input.response);
         // Create default subTopics structure if missing
         input.response.subTopics = {};
+      }
+      
+      // Ensure all expected subTopics are present
+      if (input.currentState.currentChapter?.subTopicNames) {
+        const expectedSubTopics = input.currentState.currentChapter.subTopicNames;
+        const actualSubTopics = Object.keys(input.response.subTopics);
         
-        // Add dummy content for each subTopic named in the chapter
-        if (input.currentState.currentChapter?.subTopicNames) {
-          input.currentState.currentChapter.subTopicNames.forEach((name: string) => {
+        console.log('Expected subTopics:', expectedSubTopics);
+        console.log('Actual subTopics:', actualSubTopics);
+        
+        // Add missing subTopics
+        expectedSubTopics.forEach((name: string) => {
+          if (!input.response.subTopics[name]) {
+            console.warn(`Missing subTopic: ${name}, adding default content`);
             input.response.subTopics[name] = {
               title: name,
               description: `Description for ${name}`,
               content: `Default content for ${name}`,
               sources: []
             };
-          });
-        }
+          }
+        });
       }
       
       // Ensure currentChapter exists
@@ -184,7 +185,7 @@ export function writeSectionNode(model: ChatOpenAI) {
     prepareData,
     {
       response: new RunnableLambda({ func: (x: PrepareOutput) => x }),
-      generated: prompt.pipe(model).pipe(jsonParser)
+      generated: prompt.pipe(model).pipe(parser)
     },
     addState,
     processResponse

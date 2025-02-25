@@ -120,15 +120,18 @@ export function buildResearchGraph(
             ...state, 
             plannedChapters,
             chapterOrder: plannedChapters.map(chapter => chapter.title),
-            chapters: plannedChapters.reduce((acc, chapter) => {
+            chapters: plannedChapters.reduce<Record<string, Chapter>>((acc, chapter) => {
+              // Create a proper Chapter object with all required properties
               acc[chapter.title] = {
-                ...chapter,
+                title: chapter.title,
+                description: chapter.description,
+                subTopicNames: chapter.subTopicNames,
+                status: 'pending',
                 phase: RESEARCH_PHASES.PLANNING,
-                timestamp: new Date().toISOString(),
-                status: 'pending'
+                timestamp: new Date().toISOString()
               };
               return acc;
-            }, {} as Record<string, typeof plannedChapters[0]>),
+            }, {}),
             currentPhase: RESEARCH_PHASES.PLANNING,
             progress: {
               ...state.progress,

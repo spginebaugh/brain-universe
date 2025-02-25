@@ -5,6 +5,7 @@ import { LLMResult } from "@langchain/core/outputs";
 import { Serialized } from "@langchain/core/load/serializable";
 import { Run } from "@langchain/core/tracers/base";
 import chalk from 'chalk';
+import util from 'util';
 
 type KVMap = Record<string, unknown>;
 
@@ -32,10 +33,22 @@ export class ResearchLogger extends ConsoleCallbackHandler {
     }
   }
 
-  private logStep(step: string, content?: string) {
+  private logStep(step: string, content?: string | object | unknown) {
     console.log(chalk.yellow(`\n→ ${step}`));
     if (content) {
-      console.log(content);
+      if (typeof content === 'string') {
+        try {
+          // Try to parse the content as JSON
+          const jsonContent = JSON.parse(content);
+          console.log(util.inspect(jsonContent, { colors: true, depth: 4, compact: false }));
+        } catch {
+          // If parsing fails, just log the content as is
+          console.log(content);
+        }
+      } else {
+        // If content is already an object
+        console.log(util.inspect(content, { colors: true, depth: 4, compact: false }));
+      }
     }
   }
 
@@ -92,7 +105,7 @@ export class ResearchLogger extends ConsoleCallbackHandler {
         const response = errorObj.response as Record<string, unknown>;
         if (response.data) {
           console.error(chalk.red('\nError Details:'));
-          console.error(chalk.red(this.formatJSON(response.data)));
+          console.log(util.inspect(response.data, { colors: true, depth: 4, compact: false }));
         }
       }
     }
@@ -128,9 +141,9 @@ export class ResearchLogger extends ConsoleCallbackHandler {
     name?: string
   ): Promise<Run> {
     this.logSection("Chain Started", `Chain: ${chain.name || name} (${runId})`);
-    this.logStep("Inputs", this.formatJSON(inputs));
-    if (tags?.length) this.logStep("Tags", this.formatJSON(tags));
-    if (metadata) this.logStep("Metadata", this.formatJSON(metadata));
+    this.logStep("Inputs", inputs);
+    if (tags?.length) this.logStep("Tags", tags);
+    if (metadata) this.logStep("Metadata", metadata);
     return this.createRun(runId);
   }
 
@@ -142,8 +155,8 @@ export class ResearchLogger extends ConsoleCallbackHandler {
     kwargs?: { inputs?: Record<string, unknown> }
   ): Promise<Run> {
     this.logSection("Chain Completed", `RunID: ${runId}`);
-    this.logStep("Outputs", this.formatJSON(outputs));
-    if (kwargs?.inputs) this.logStep("Original Inputs", this.formatJSON(kwargs.inputs));
+    this.logStep("Outputs", outputs);
+    if (kwargs?.inputs) this.logStep("Original Inputs", kwargs.inputs);
     return this.createRun(runId);
   }
 
@@ -156,7 +169,7 @@ export class ResearchLogger extends ConsoleCallbackHandler {
   ): Promise<Run> {
     this.logSection("Chain Error", `RunID: ${runId}`);
     this.logError(error);
-    if (kwargs?.inputs) this.logStep("Original Inputs", this.formatJSON(kwargs.inputs));
+    if (kwargs?.inputs) this.logStep("Original Inputs", kwargs.inputs);
     return this.createRun(runId);
   }
 
@@ -171,10 +184,10 @@ export class ResearchLogger extends ConsoleCallbackHandler {
     name?: string
   ): Promise<Run> {
     this.logSection("LLM Started", `Model: ${llm.name || name} (${runId})`);
-    this.logStep("Prompts", this.formatJSON(prompts));
-    if (tags?.length) this.logStep("Tags", this.formatJSON(tags));
-    if (metadata) this.logStep("Metadata", this.formatJSON(metadata));
-    if (extraParams) this.logStep("Extra Params", this.formatJSON(extraParams));
+    this.logStep("Prompts", prompts);
+    if (tags?.length) this.logStep("Tags", tags);
+    if (metadata) this.logStep("Metadata", metadata);
+    if (extraParams) this.logStep("Extra Params", extraParams);
     return this.createRun(runId);
   }
 
@@ -186,8 +199,8 @@ export class ResearchLogger extends ConsoleCallbackHandler {
     extraParams?: Record<string, unknown>
   ): Promise<Run> {
     this.logSection("LLM Completed", `RunID: ${runId}`);
-    this.logStep("Response", this.formatJSON(output));
-    if (extraParams) this.logStep("Extra Params", this.formatJSON(extraParams));
+    this.logStep("Response", output);
+    if (extraParams) this.logStep("Extra Params", extraParams);
     return this.createRun(runId);
   }
 
@@ -200,7 +213,7 @@ export class ResearchLogger extends ConsoleCallbackHandler {
   ): Promise<Run> {
     this.logSection("LLM Error", `RunID: ${runId}`);
     this.logError(error);
-    if (extraParams) this.logStep("Extra Params", this.formatJSON(extraParams));
+    if (extraParams) this.logStep("Extra Params", extraParams);
     return this.createRun(runId);
   }
 
@@ -215,14 +228,14 @@ export class ResearchLogger extends ConsoleCallbackHandler {
   ): Promise<Run> {
     this.logSection("Tool Started", `Tool: ${tool.name || name} (${runId})`);
     this.logStep("Input", input);
-    if (tags?.length) this.logStep("Tags", this.formatJSON(tags));
-    if (metadata) this.logStep("Metadata", this.formatJSON(metadata));
+    if (tags?.length) this.logStep("Tags", tags);
+    if (metadata) this.logStep("Metadata", metadata);
     return this.createRun(runId);
   }
 
   async handleToolEnd(output: unknown, runId: string): Promise<Run> {
     this.logSection("Tool Completed", `RunID: ${runId}`);
-    this.logStep("Output", typeof output === 'string' ? output : this.formatJSON(output));
+    this.logStep("Output", output);
     return this.createRun(runId);
   }
 
@@ -234,16 +247,16 @@ export class ResearchLogger extends ConsoleCallbackHandler {
 
   async handleAgentAction(action: AgentAction, runId: string): Promise<void> {
     this.logSection("Agent Action", `RunID: ${runId}`);
-    this.logStep("Action", this.formatJSON({
+    this.logStep("Action", {
       tool: action.tool,
       toolInput: action.toolInput,
       log: action.log
-    }));
+    });
   }
 
   async handleAgentEnd(action: AgentFinish, runId: string): Promise<void> {
     this.logSection("Agent Finished", `RunID: ${runId}`);
-    this.logStep("Return Values", this.formatJSON(action.returnValues));
+    this.logStep("Return Values", action.returnValues);
     if (action.log) {
       this.logStep("Log", action.log);
     }

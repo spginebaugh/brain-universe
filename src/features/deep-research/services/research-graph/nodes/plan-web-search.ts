@@ -1,10 +1,18 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { PromptTemplate } from '@langchain/core/prompts';
-import { JsonOutputParser } from '@langchain/core/output_parsers';
+import { StructuredOutputParser } from '@langchain/core/output_parsers';
+import { z } from 'zod';
 import { ResearchState } from '../../../types/research';
 import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
-import { QueryResult } from '../../../types/parser-types';
+
+// Define schema for structured output
+const querySchema = z.object({
+  query: z.string().describe("The search query to gather information"),
+  purpose: z.string().describe("The purpose of this query in the research process")
+});
+
+const queriesSchema = z.array(querySchema).describe("An array of search queries to gather comprehensive information");
 
 // Template for generating initial research queries
 const QUERY_GENERATION_TEMPLATE = `You are an expert technical writer helping to plan a learning roadmap.. Generate search queries to gather comprehensive information about: {researchSubject}
@@ -20,27 +28,29 @@ Requirements:
 2. Make queries specific enough to find high-quality, relevant sources
 3. Cover the breadth needed for the learning roadmap structure
 
-Format the response as a JSON array of queries, where each query has:
-- query: string
-- purpose: string`;
+{format_instructions}`;
 
 export function planWebSearchNode(
   model: ChatOpenAI,
   searchTool: TavilySearchResults
 ) {
-  const queryJsonParser = new JsonOutputParser<QueryResult[]>();
+  // Create structured output parser
+  const parser = StructuredOutputParser.fromZodSchema(queriesSchema);
+  const formatInstructions = parser.getFormatInstructions();
+  
   const queryPrompt = PromptTemplate.fromTemplate(QUERY_GENERATION_TEMPLATE);
 
   return RunnableSequence.from([
     // 1. Extract initial state
     (state: ResearchState) => ({
       researchSubject: state.researchSubject,
-      numberOfQueries: 5 // We can make this configurable if needed
+      numberOfQueries: 5, // We can make this configurable if needed
+      format_instructions: formatInstructions
     }),
 
     // 2. Generate initial research queries
     async (input) => {
-      const queryChain = queryPrompt.pipe(model).pipe(queryJsonParser);
+      const queryChain = queryPrompt.pipe(model).pipe(parser);
       const queries = await queryChain.invoke(input);
 
       return {

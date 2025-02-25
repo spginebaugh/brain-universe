@@ -1,8 +1,18 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { PromptTemplate } from '@langchain/core/prompts';
-import { JsonOutputParser } from '@langchain/core/output_parsers';
-import { ResearchState, Chapter, SearchResult } from '../../../types/research';
+import { StructuredOutputParser } from '@langchain/core/output_parsers';
+import { z } from 'zod';
+import { ResearchState, SearchResult } from '../../../types/research';
+
+// Define schema for structured output
+const chapterSchema = z.object({
+  title: z.string().describe("The title of the chapter"),
+  description: z.string().describe("A clear and concise description of the chapter"),
+  subTopicNames: z.array(z.string()).length(6).describe("Exactly 6 sub-topic names that help organize the content")
+});
+
+const chaptersSchema = z.array(chapterSchema).describe("An array of chapters that comprehensively cover the topic");
 
 // Template for creating the plan using research
 const PLAN_TEMPLATE = `You are an expert technical writer helping to plan a learning roadmap for the topic: {researchSubject}
@@ -18,13 +28,13 @@ For each chapter:
 
 Ensure the chapters flow logically and cover the topic comprehensively using insights from the research.
 
-Format the response as a JSON array of chapters, where each chapter has:
-- title: string
-- description: string
-- subTopicNames: string[]`;
+{format_instructions}`;
 
 export function generatePlanNode(model: ChatOpenAI) {
-  const chapterJsonParser = new JsonOutputParser<Chapter[]>();
+  // Create structured output parser
+  const parser = StructuredOutputParser.fromZodSchema(chaptersSchema);
+  const formatInstructions = parser.getFormatInstructions();
+  
   const planPrompt = PromptTemplate.fromTemplate(PLAN_TEMPLATE);
 
   return RunnableSequence.from([
@@ -37,38 +47,42 @@ export function generatePlanNode(model: ChatOpenAI) {
       return {
         researchSubject: state.researchSubject,
         numberOfChapters: state.numberOfChapters,
-        researchContext
+        researchContext,
+        format_instructions: formatInstructions
       };
     },
 
     // 2. Generate plan using research context
     async (input) => {
-      const planChain = planPrompt.pipe(model).pipe(chapterJsonParser);
+      const planChain = planPrompt.pipe(model).pipe(parser);
       const chapters = await planChain.invoke(input);
 
       if (!Array.isArray(chapters)) {
         throw new Error('Chapters must be an array');
       }
       
-      chapters.forEach((chapter, index) => {
+      // Add status property to each chapter
+      const chaptersWithStatus = chapters.map(chapter => ({
+        ...chapter,
+        status: 'pending' as const
+      }));
+      
+      chaptersWithStatus.forEach((chapter, index) => {
         if (!chapter.title || !chapter.description || !Array.isArray(chapter.subTopicNames)) {
           throw new Error(`Invalid chapter structure at index ${index}`);
         }
         if (chapter.subTopicNames.length !== 6) {
           throw new Error(`Chapter ${chapter.title} must have exactly 6 sub-topic names`);
         }
-        
-        // Set initial status for each chapter
-        chapter.status = 'pending';
       });
 
       return {
-        plannedChapters: chapters,
+        plannedChapters: chaptersWithStatus,
         completedChapters: [],
         currentChapter: null,
         content: JSON.stringify({
           outline: {
-            chapters: chapters.map(c => ({
+            chapters: chaptersWithStatus.map(c => ({
               title: c.title,
               description: c.description,
               subTopicNames: c.subTopicNames

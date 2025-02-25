@@ -2,10 +2,19 @@ import { ChatOpenAI } from '@langchain/openai';
 import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
 import { RunnableSequence } from '@langchain/core/runnables';
 import { PromptTemplate } from '@langchain/core/prompts';
-import { JsonOutputParser } from '@langchain/core/output_parsers';
+import { StructuredOutputParser } from '@langchain/core/output_parsers';
+import { z } from 'zod';
 import { ResearchState } from '../../../types/research';
 import { config } from '../../../config';
-import { QueryResult, SearchOutput } from '../../../types/parser-types';
+import { SearchOutput } from '../../../types/parser-types';
+
+// Define schema for structured output
+const querySchema = z.object({
+  query: z.string().describe("The search query to gather information for the chapter"),
+  purpose: z.string().describe("The purpose of this query in researching the chapter")
+});
+
+const queriesSchema = z.array(querySchema).describe("An array of search queries to gather comprehensive information for the chapter");
 
 const SEARCH_QUERY_TEMPLATE = `You are an expert teacher crafting targeted web search queries that will gather comprehensive information for writing a detailed lesson for one chapter of a learning roadmap.:
 
@@ -16,21 +25,22 @@ SubTopics: {subTopicNames}
 
 Generate {numberOfQueries} search queries that will help gather comprehensive information for writing this chapter.
 
-Format the response as a JSON array of queries, where each query has:
-- query: string
-- purpose: string
-
 Requirements:
 1. Cover different aspects of the topic (e.g., core features, real-world applications, technical architecture)
 2. Include specific technical terms related to the topic
 3. Target recent information by including year markers where relevant (e.g., "2025")
 4. Look for comparisons or differentiators from similar technologies/approaches
 5. Search for both official documentation and practical implementation examples
-6. Address each sub-topic name specifically to ensure comprehensive coverage`;
+6. Address each sub-topic name specifically to ensure comprehensive coverage
+
+{format_instructions}`;
 
 export function sectionWebSearchNode(searchTool: TavilySearchResults) {
+  // Create structured output parser
+  const parser = StructuredOutputParser.fromZodSchema(queriesSchema);
+  const formatInstructions = parser.getFormatInstructions();
+  
   const queryPrompt = PromptTemplate.fromTemplate(SEARCH_QUERY_TEMPLATE);
-  const queryJsonParser = new JsonOutputParser<QueryResult[]>();
   
   // Initialize a model for query generation
   const queryModel = new ChatOpenAI({
@@ -59,13 +69,14 @@ export function sectionWebSearchNode(searchTool: TavilySearchResults) {
         chapterDescription: nextChapter.description,
         subTopicNames: nextChapter.subTopicNames.join(', '),
         numberOfQueries: 3,
+        format_instructions: formatInstructions,
         chapter: nextChapter
       };
     },
     // Generate search queries
     async (input) => {
       try {
-        const queryChain = queryPrompt.pipe(queryModel).pipe(queryJsonParser);
+        const queryChain = queryPrompt.pipe(queryModel).pipe(parser);
         const queries = await queryChain.invoke(input);
         
         if (!queries || !queries.length) {

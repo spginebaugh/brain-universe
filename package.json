@@ -33,6 +33,7 @@
     "button": "^1.1.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "console-log-tree": "^1.2.1",
     "embla-carousel-react": "^8.5.2",
     "firebase": "^11.3.1",
     "http-browserify": "^1.7.0",
