@@ -456,6 +456,107 @@ export const ResearchForm: React.FC<ResearchFormProps> = ({
   </Card>
 );
 
+// JSON Tree Viewer component for collapsible JSON display
+interface JsonTreeProps {
+  data: unknown;
+  level?: number;
+  label?: string;
+  isRoot?: boolean;
+}
+
+const JsonTreeView: React.FC<JsonTreeProps> = ({ 
+  data, 
+  level = 0, 
+  label, 
+  isRoot = false 
+}) => {
+  const [isExpanded, setIsExpanded] = useState(isRoot || level < 1);
+  
+  const toggleExpand = () => {
+    setIsExpanded(!isExpanded);
+  };
+  
+  const isObject = data !== null && typeof data === 'object';
+  const isArray = Array.isArray(data);
+  const isEmpty = isObject && Object.keys(data as object).length === 0;
+  
+  const renderValue = () => {
+    if (data === null) return <span className="text-gray-500">null</span>;
+    if (data === undefined) return <span className="text-gray-500">undefined</span>;
+    if (typeof data === 'boolean') return <span className="text-purple-600 font-semibold">{data.toString()}</span>;
+    if (typeof data === 'number') return <span className="text-blue-600">{data}</span>;
+    if (typeof data === 'string') {
+      // For long strings, truncate them
+      const displayStr = data.length > 100 ? `${data.substring(0, 100)}...` : data;
+      return <span className="text-green-600">&ldquo;{displayStr}&rdquo;</span>;
+    }
+    
+    if (isEmpty) {
+      return <span className="text-gray-500">{isArray ? '[]' : '{}'}</span>;
+    }
+    
+    if (isObject) {
+      return (
+        <div className="ml-4 border-l border-gray-200 pl-2">
+          {isExpanded && (
+            <div>
+              {Object.entries(data as object).map(([key, value]) => (
+                <JsonTreeView 
+                  key={key} 
+                  data={value} 
+                  level={level + 1} 
+                  label={key} 
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+    
+    return <span>{String(data)}</span>;
+  };
+  
+  const getTypeLabel = () => {
+    if (data === null) return 'null';
+    if (isArray) return `Array(${(data as unknown[]).length})`;
+    if (isObject) return `Object`;
+    return typeof data;
+  };
+  
+  if (!isObject && label !== undefined) {
+    return (
+      <div className={`${level > 0 ? 'ml-4' : ''} py-1`}>
+        <span className="text-red-600 font-medium">{label}: </span>
+        {renderValue()}
+      </div>
+    );
+  }
+  
+  return (
+    <div className={`${level > 0 ? 'ml-4' : ''}`}>
+      {label !== undefined && (
+        <div 
+          className="flex items-center cursor-pointer hover:bg-gray-100 py-1 rounded px-1 transition-colors"
+          onClick={toggleExpand}
+        >
+          <span className="mr-1 text-gray-500 inline-block w-4 text-center">
+            {isExpanded ? '▼' : '►'}
+          </span>
+          <span className="text-red-600 font-medium">{label}: </span>
+          <span className="text-gray-500 ml-1">
+            {getTypeLabel()}
+            {!isExpanded && isArray && (data as unknown[]).length > 0 && ` [${(data as unknown[]).length} items]`}
+            {!isExpanded && !isArray && Object.keys(data as object).length > 0 && ` {${Object.keys(data as object).length} keys}`}
+          </span>
+        </div>
+      )}
+      
+      {(isRoot || isExpanded) && renderValue()}
+    </div>
+  );
+};
+
 // Research state debugger component
 export interface ResearchStateDebuggerProps {
   researchState: ResearchState | undefined;
@@ -488,8 +589,8 @@ export const ResearchStateDebugger: React.FC<ResearchStateDebuggerProps> = ({
       
       {isExpanded && (
         <ScrollArea className="h-[300px]">
-          <div className="p-3 font-mono text-xs whitespace-pre-wrap overflow-x-auto">
-            {JSON.stringify(researchState, null, 2)}
+          <div className="p-3 font-mono text-xs">
+            <JsonTreeView data={researchState} isRoot={true} />
           </div>
         </ScrollArea>
       )}
