@@ -422,13 +422,16 @@ export function useNodeRevealAnimation({
       return newSet;
     });
     
-    // Remove node from popups array
-    removeNodeFromPopups(completedNodeId);
-    
     // Keep backward compatibility - clear currentAnimatingNode if it's this node
     if (currentAnimatingNode?.id === completedNodeId) {
       setCurrentAnimatingNode(null);
     }
+    
+    // Delay removing node from popups to allow animation to complete
+    setTimeout(() => {
+      // Remove node from popups array
+      removeNodeFromPopups(completedNodeId);
+    }, 1000); // Longer delay to ensure animation completes
     
     setTimeout(() => {
       if (nodeAnimation.isParent) {

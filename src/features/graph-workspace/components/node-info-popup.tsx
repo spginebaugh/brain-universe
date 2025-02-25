@@ -27,6 +27,14 @@ export const NodeInfoPopup = ({ node, onAnimationComplete }: NodeInfoPopupProps)
   const description = properties.description || '';
   const mainText = (content.mainText as string) || (content.text as string) || '';
 
+  // Get the node's background color for styling
+  const nodeBackground = node.style?.background || '#e0f2e9';
+  
+  // Create color variants for different parts of the popup
+  const cardBgColor = `${nodeBackground}95`; // 95% opacity version
+  const contentBgColor = `${nodeBackground}50`; // 50% opacity version
+  const borderColor = typeof nodeBackground === 'string' ? nodeBackground : '#e0f2e9';
+
   // Handle fade-in animation
   useEffect(() => {
     if (animationStage === 'fade-in') {
@@ -36,7 +44,7 @@ export const NodeInfoPopup = ({ node, onAnimationComplete }: NodeInfoPopupProps)
       const fadeInTimer = setTimeout(() => {
         setOpacity(1);
         setAnimationStage('title');
-      }, 900); // Reduced timing
+      }, 500); // Reduced timing
       
       return () => clearTimeout(fadeInTimer);
     }
@@ -78,13 +86,13 @@ export const NodeInfoPopup = ({ node, onAnimationComplete }: NodeInfoPopupProps)
     const titleInterval = setInterval(() => {
       if (currentIndex < title.length) {
         setDisplayedTitle(title.substring(0, currentIndex + 1));
-        currentIndex += 8; // Increased from 5 to 8 characters at once for faster animation
+        currentIndex += 3; // Increased from 5 to 8 characters at once for faster animation
       } else {
         setDisplayedTitle(title); // Ensure the full title is displayed
         clearInterval(titleInterval);
         setAnimationStage('description');
       }
-    }, 5); // Keep at minimum interval for fastest animation
+    }, 9); // Keep at minimum interval for fastest animation
     
     return () => clearInterval(titleInterval);
   }, [title, animationStage]);
@@ -97,13 +105,13 @@ export const NodeInfoPopup = ({ node, onAnimationComplete }: NodeInfoPopupProps)
     const descriptionInterval = setInterval(() => {
       if (currentIndex < description.length) {
         setDisplayedDescription(description.substring(0, currentIndex + 1));
-        currentIndex += 15; // Increased from 10 to 15 characters at once for faster animation
+        currentIndex += 5; // Increased from 10 to 15 characters at once for faster animation
       } else {
         setDisplayedDescription(description); // Ensure the full description is displayed
         clearInterval(descriptionInterval);
         setAnimationStage('content');
       }
-    }, 1); // Keep at minimum interval for fastest animation
+    }, 8); // Keep at minimum interval for fastest animation
     
     return () => clearInterval(descriptionInterval);
   }, [description, animationStage]);
@@ -157,7 +165,13 @@ export const NodeInfoPopup = ({ node, onAnimationComplete }: NodeInfoPopupProps)
           opacity: opacity
         }}
       >
-        <Card className="shadow-lg border-2 border-blue-200 bg-white/95 backdrop-blur-sm">
+        <Card 
+          className="shadow-lg border-2 backdrop-blur-sm"
+          style={{
+            borderColor: borderColor,
+            background: cardBgColor
+          }}
+        >
           <CardHeader className="pb-2 px-4">
             <CardTitle className="text-lg font-bold break-words overflow-visible">{displayedTitle}</CardTitle>
           </CardHeader>
@@ -171,11 +185,11 @@ export const NodeInfoPopup = ({ node, onAnimationComplete }: NodeInfoPopupProps)
               className="text-sm whitespace-pre-wrap h-[250px] overflow-y-auto overflow-x-hidden pr-2 pointer-events-auto scroll-smooth"
               style={{
                 scrollbarWidth: 'thin',
-                scrollbarColor: '#93c5fd transparent',
+                scrollbarColor: `${nodeBackground} transparent`,
                 position: 'relative',
                 borderRadius: '0.25rem',
                 padding: '0.5rem',
-                background: 'rgba(255, 255, 255, 0.5)',
+                background: contentBgColor,
                 boxShadow: 'inset 0 0 6px rgba(0, 0, 0, 0.1)'
               }}
             >
