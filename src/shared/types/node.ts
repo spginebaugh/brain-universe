@@ -15,6 +15,7 @@ export interface NodeMetadata {
   status: NodeStatus;
   tags: string[];
   prerequisites?: string[];
+  backgroundColor?: string;
 }
 
 export interface NodeProgress {

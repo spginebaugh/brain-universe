@@ -1,4 +1,4 @@
-import { Info, Bot } from 'lucide-react';
+import { Info, Bot, EyeOff, Eye, PlayCircle } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { Node, useReactFlow, useStoreApi } from '@xyflow/react';
 import { FlowNodeData } from '../types/workspace-types';
@@ -9,9 +9,12 @@ interface NodeMenuProps {
   node: Node<FlowNodeData>;
   onInfoClick: () => void;
   onClose: () => void;
+  onToggleVisibility: () => void;
+  onStartAnimation: () => void;
+  areNodesHidden: boolean;
 }
 
-export const NodeMenu = ({ node, onInfoClick, onClose }: NodeMenuProps) => {
+export const NodeMenu = ({ node, onInfoClick, onClose, onToggleVisibility, onStartAnimation, areNodesHidden }: NodeMenuProps) => {
   const { getNode } = useReactFlow();
   const store = useStoreApi();
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -77,6 +80,26 @@ export const NodeMenu = ({ node, onInfoClick, onClose }: NodeMenuProps) => {
         >
           <Bot className="h-4 w-4" />
         </Button>
+        <Button
+          variant="secondary"
+          size="icon"
+          className="h-8 w-8 rounded-full shadow-lg hover:bg-blue-100"
+          onClick={onToggleVisibility}
+          title={areNodesHidden ? "Show all nodes and edges" : "Hide non-root nodes and edges"}
+        >
+          {areNodesHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+        </Button>
+        {areNodesHidden && (
+          <Button
+            variant="secondary"
+            size="icon"
+            className="h-8 w-8 rounded-full shadow-lg hover:bg-green-100"
+            onClick={onStartAnimation}
+            title="Animate node reveal sequence"
+          >
+            <PlayCircle className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
       <RoadmapGeneration

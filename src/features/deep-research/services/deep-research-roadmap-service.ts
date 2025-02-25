@@ -378,6 +378,48 @@ export class DeepResearchRoadmapService {
                 query => query.targetSubTopic === subTopicName
               ) || [];
               
+              // Debug log to see what's happening with subtopics
+              console.log(`Subtopic processing: ${subTopicName}`, {
+                resultsFound: subtopicResults.length,
+                allResults: chapter.research?.results?.length || 0,
+                targetSubTopicsInResults: chapter.research?.results?.map(r => r.targetSubTopic).filter(Boolean),
+                firstFewResults: chapter.research?.results?.slice(0, 2)
+              });
+              
+              // If no specific subtopic results were found, consider all results that don't have a targetSubTopic
+              // This helps when research results aren't properly tagged with the subtopic
+              if (subtopicResults.length === 0 && chapter.research?.results) {
+                // Find untargeted results or fallback to all results if needed
+                const untargetedResults = chapter.research.results.filter(
+                  result => !result.targetSubTopic || result.targetSubTopic === ''
+                );
+                
+                // Only use untargeted results if we have a reasonable number (otherwise we'd duplicate them for all subtopics)
+                if (untargetedResults.length > 0 && untargetedResults.length <= 3) {
+                  console.log(`Using ${untargetedResults.length} untargeted results for subtopic ${subTopicName}`);
+                  subtopicResults.push(...untargetedResults);
+                } else {
+                  // If we have many untargeted results, distribute them across subtopics
+                  const subTopicCount = Object.keys(chapter.content!.subTopics).length;
+                  const subTopicIndex = Object.keys(chapter.content!.subTopics).indexOf(subTopicName);
+                  
+                  if (subTopicCount > 0 && subTopicIndex >= 0) {
+                    // Divide results among subtopics
+                    const resultsPerSubtopic = Math.ceil(untargetedResults.length / subTopicCount);
+                    const startIndex = subTopicIndex * resultsPerSubtopic;
+                    const endIndex = Math.min(startIndex + resultsPerSubtopic, untargetedResults.length);
+                    
+                    // Assign a portion of the results to this subtopic
+                    const assignedResults = untargetedResults.slice(startIndex, endIndex);
+                    
+                    if (assignedResults.length > 0) {
+                      console.log(`Distributing ${assignedResults.length} results to subtopic ${subTopicName} (${startIndex}-${endIndex-1})`);
+                      subtopicResults.push(...assignedResults);
+                    }
+                  }
+                }
+              }
+              
               // Create the update for the subtopic node
               const subtopicUpdate = {
                 properties: {
@@ -387,7 +429,7 @@ export class DeepResearchRoadmapService {
                 },
                 content: {
                   mainText: subTopic.content || '',
-                  resources: [] as Array<{title: string; url: string; type: string}>,
+                  resources: [] as Array<{title: string; url: string; type: string; content?: string}>,
                   researchQueries: subtopicQueries.filter(q => q.query).map(q => q.query || '')
                 },
                 metadata: {
@@ -396,6 +438,13 @@ export class DeepResearchRoadmapService {
                 }
               };
               
+              // No research results at all? Try to share some content from the chapter
+              if (subtopicResults.length === 0 && subtopicUpdate.content.mainText === '' && chapter.content?.overview) {
+                // Use a portion of the chapter overview as content for this subtopic
+                console.log(`Using chapter overview for empty subtopic ${subTopicName}`);
+                subtopicUpdate.content.mainText = `# ${subTopicName}\n\nThis is part of the ${chapter.title} topic.\n\n${chapter.content.overview.substring(0, 150)}...\n`;
+              }
+              
               // Add sources as resources
               if (subTopic.sources && subTopic.sources.length > 0) {
                 for (const src of subTopic.sources) {
@@ -403,7 +452,8 @@ export class DeepResearchRoadmapService {
                     subtopicUpdate.content.resources.push({
                       title: src.title,
                       url: src.url,
-                      type: 'link'
+                      type: 'link',
+                      content: '' // Add empty content for sources
                     });
                   }
                 }
@@ -413,12 +463,39 @@ export class DeepResearchRoadmapService {
               if (subtopicResults.length > 0) {
                 for (const result of subtopicResults) {
                   if (result.title && result.url) {
+                    // Log each resource being added with its content length to diagnose issues
+                    console.log(`Adding resource to subtopic ${subTopicName}:`, {
+                      title: result.title,
+                      hasContent: !!result.content,
+                      contentLength: result.content?.length || 0
+                    });
+                    
                     subtopicUpdate.content.resources.push({
                       title: result.title,
                       url: result.url,
-                      type: 'link'
+                      type: 'link',
+                      content: result.content || ''
                     });
                   }
+                }
+                
+                // Add a summary of research results to the main text
+                if (subtopicUpdate.content.mainText) {
+                  subtopicUpdate.content.mainText += '\n\n## Research Results\n';
+                  subtopicResults.forEach(result => {
+                    if (result.title) {
+                      subtopicUpdate.content.mainText += `\n### ${result.title}\n`;
+                      if (result.content) {
+                        // Add a preview of the content (first 100 characters)
+                        const contentPreview = result.content.substring(0, 100) + 
+                          (result.content.length > 100 ? '...' : '');
+                        subtopicUpdate.content.mainText += contentPreview + '\n';
+                      }
+                      if (result.url) {
+                        subtopicUpdate.content.mainText += `[Source](${result.url})\n`;
+                      }
+                    }
+                  });
                 }
               }
               

@@ -406,14 +406,15 @@ export function updateCompletedChapter(
   
   // Add research results as resources
   if (chapter.research?.results && chapter.research.results.length > 0 && nodeUpdate.content) {
-    const resources = nodeUpdate.content.resources as Array<{title: string; url: string; type: string}>;
+    const resources = nodeUpdate.content.resources as Array<{title: string; url: string; type: string; content?: string}>;
     for (const result of chapter.research.results) {
       // Only add if we have a title and URL
       if (result.title && result.url) {
         resources.push({
           title: result.title,
           url: result.url,
-          type: 'link'
+          type: 'link',
+          content: result.content || '' // Include the content if available
         });
       }
     }

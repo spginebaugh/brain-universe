@@ -27,10 +27,11 @@ export const transformGraphsToReactFlow = (graphs: FlowGraph[]) => {
         metadata: node.metadata,
         progress: node.progress,
         content: node.content,
-        extensions: node.extensions
+        extensions: node.extensions,
+        rootNodeId: graph.rootNodeId
       },
       style: {
-        background: node.nodeId === graph.rootNodeId ? '#e0f2e9' : '#fff',
+        background: node.metadata.backgroundColor || (node.nodeId === graph.rootNodeId ? '#e0f2e9' : '#fff'),
         border: '1px solid #ddd',
         padding: 10,
         borderRadius: 5

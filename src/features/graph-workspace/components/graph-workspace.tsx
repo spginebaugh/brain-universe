@@ -12,7 +12,9 @@ import {
   OnNodeDrag, 
   useReactFlow, 
   useViewport, 
-  useStoreApi
+  useStoreApi,
+  useOnSelectionChange,
+  SelectionMode
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useGraphWorkspace } from '../hooks/use-graph-workspace';
@@ -24,6 +26,7 @@ import { useTemplateSelectionStore } from '@/features/side-bar/stores/template-s
 import { useRootNodeCreationStore } from '@/features/side-bar/stores/root-node-creation-store';
 import { useNodeCreationStore } from '@/features/side-bar/stores/node-creation-store';
 import { useEdgeCreationStore } from '@/features/side-bar/stores/edge-creation-store';
+import { useNodeSelectionStore } from '@/features/side-bar/stores/node-selection-store';
 import { TemplateService } from '@/shared/services/firebase/template-service';
 import { auth } from '@/shared/services/firebase/config';
 import { Alert, AlertDescription } from '@/shared/components/ui/alert';
@@ -31,6 +34,7 @@ import { Button } from '@/shared/components/ui/button';
 import { DbNode, DbEdge } from '@/shared/types/db-types';
 import { NodeInfoDialog } from './node-info-dialog';
 import { NodeMenu } from './node-menu';
+import { NodeInfoPopup } from './node-info-popup';
 import {
   transformGraphsToReactFlow,
   calculateRelativePosition,
@@ -40,6 +44,7 @@ import {
   createNewGraph,
   handleAsyncOperation,
 } from '../utils';
+import { MultiNodeColorMenu } from '@/features/side-bar/components/multi-node-color-menu';
 
 interface GraphWorkspaceProps {
   userId: string;
@@ -136,6 +141,13 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
     setSelectedFirstNode,
     resetSelection: resetEdgeCreation
   } = useEdgeCreationStore();
+  const { 
+    selectedNodes, 
+    setSelectedNodes, 
+    clearSelectedNodes,
+    isMultiEditMode,
+    setMultiEditMode
+  } = useNodeSelectionStore();
   const reactFlowInstance = useReactFlow();
   const [isPlacing, setIsPlacing] = useState(false);
   const [selectedGraphId, setSelectedGraphId] = useState<string | null>(null);
@@ -143,10 +155,34 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
   const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
   const [connectingNodeId, setConnectingNodeId] = useState<string | null>(null);
   const [menuNode, setMenuNode] = useState<Node<FlowNodeData> | null>(null);
+  const [hiddenGraphIds, setHiddenGraphIds] = useState<Set<string>>(new Set());
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animatingGraphId, setAnimatingGraphId] = useState<string | null>(null);
+  const [animationNodeIndex, setAnimationNodeIndex] = useState(0);
+  const [animationNodes, setAnimationNodes] = useState<Node<FlowNodeData>[]>([]);
+  const [visibleNodeIds, setVisibleNodeIds] = useState<Set<string>>(new Set());
+  const [currentAnimatingNode, setCurrentAnimatingNode] = useState<Node<FlowNodeData> | null>(null);
+  const [isMultiNodeColorMenuOpen, setIsMultiNodeColorMenuOpen] = useState(false);
   
   // Initialize node and edge states with correct types
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<FlowEdgeData>>([]);
+
+  // Track selected nodes
+  useOnSelectionChange({
+    onChange: ({ nodes }) => {
+      setSelectedNodes(nodes as Node<FlowNodeData>[]);
+    },
+  });
+
+  // Watch for changes in multi-edit mode
+  useEffect(() => {
+    if (isMultiEditMode && selectedNodes.length > 1) {
+      setIsMultiNodeColorMenuOpen(true);
+    } else {
+      setIsMultiNodeColorMenuOpen(false);
+    }
+  }, [isMultiEditMode, selectedNodes.length]);
 
   // Update nodes and edges when graphs change
   useEffect(() => {
@@ -186,8 +222,12 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
     if (event.shiftKey) {
       setSelectedGraphId(node.data.graphId);
       event.preventDefault();
-    } else {
+    } else if (!event.ctrlKey && !event.metaKey) {
+      // If not holding Ctrl/Cmd, clear selection and select only this node
       setSelectedGraphId(null);
+      
+      // Show node menu on regular click (not multi-select)
+      setMenuNode(node);
     }
   }, [isNewNodeCreationMode, selectedParentGraphId, setSelectedParentGraphId, isEdgeCreationMode, selectedFirstNodeId, setSelectedFirstNode, menuNode]);
 
@@ -299,6 +339,11 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
   const handlePaneClick = useCallback(async (event: React.MouseEvent) => {
     // Close menu when clicking on the pane
     setMenuNode(null);
+    
+    // Clear selected nodes when clicking on the pane (unless in multi-edit mode)
+    if (!isMultiEditMode) {
+      clearSelectedNodes();
+    }
 
     const position = reactFlowInstance.screenToFlowPosition({
       x: event.clientX,
@@ -398,7 +443,7 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
         }
       );
     }
-  }, [isNewNodeCreationMode, selectedParentGraphId, reactFlowInstance, graphService, refresh, resetNodeCreation, graphs, nodes, isPlacing, isPlacementMode, selectedTemplateId, clearSelection, isRootNodeCreationMode, setRootNodeCreationMode]);
+  }, [isNewNodeCreationMode, selectedParentGraphId, reactFlowInstance, graphService, refresh, resetNodeCreation, graphs, nodes, isPlacing, isPlacementMode, selectedTemplateId, clearSelection, isRootNodeCreationMode, setRootNodeCreationMode, isMultiEditMode, clearSelectedNodes]);
 
   const onNodeDoubleClick = useCallback((event: React.MouseEvent, node: Node<FlowNodeData>) => {
     event.preventDefault();
@@ -511,6 +556,248 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
     [connectingNodeId, reactFlowInstance, nodes, graphs, graphService, refresh]
   );
 
+  // Function to toggle visibility of non-root nodes and edges in the current graph
+  const handleToggleVisibility = useCallback(() => {
+    if (isAnimating || !menuNode) return; // Prevent toggling while animation is in progress
+    
+    const graphId = menuNode.data.graphId;
+    
+    setHiddenGraphIds(prevHiddenGraphIds => {
+      const newHiddenGraphIds = new Set(prevHiddenGraphIds);
+      if (newHiddenGraphIds.has(graphId)) {
+        newHiddenGraphIds.delete(graphId);
+      } else {
+        newHiddenGraphIds.add(graphId);
+      }
+      return newHiddenGraphIds;
+    });
+  }, [isAnimating, menuNode]);
+
+  // Function to sort nodes in the desired order for animation
+  const sortNodesForAnimation = useCallback((nodes: Node<FlowNodeData>[], graphId: string) => {
+    const sorted: Node<FlowNodeData>[] = [];
+    
+    // Get all nodes for this graph
+    const graphNodes = nodes.filter(node => node.data.graphId === graphId);
+    
+    // Find the root node for this graph
+    const rootNode = graphNodes.find(node => node.style?.background === '#e0f2e9');
+    if (!rootNode) return graphNodes; // Fallback if no root node found
+    
+    // Get all edges for this graph to understand connections
+    const graphEdges = edges.filter(edge => {
+      const sourceNode = nodes.find(n => n.id === edge.source);
+      return sourceNode && sourceNode.data.graphId === graphId;
+    });
+    
+    // Build a map of parent to children relationships
+    const childrenMap: Record<string, string[]> = {};
+    const parentMap: Record<string, string> = {};
+    
+    // Initialize for all nodes
+    graphNodes.forEach(node => {
+      childrenMap[node.id] = [];
+    });
+    
+    // Populate the maps using edges
+    graphEdges.forEach(edge => {
+      // Add child to parent's children list
+      if (childrenMap[edge.source]) {
+        childrenMap[edge.source].push(edge.target);
+      }
+      
+      // Record parent of child
+      parentMap[edge.target] = edge.source;
+    });
+    
+    // Function to check if a node is a parent (has children)
+    const isParentNode = (nodeId: string) => childrenMap[nodeId]?.length > 0;
+    
+    // First add the root node
+    sorted.push(rootNode);
+    
+    // Find the primary parent node (directly connected to root)
+    const primaryParents = childrenMap[rootNode.id] || [];
+    
+    // Function to process a parent node and its children
+    const processParentChain = (parentNodeId: string, processedNodes = new Set<string>()) => {
+      if (processedNodes.has(parentNodeId)) return; // Prevent cycles
+      processedNodes.add(parentNodeId);
+      
+      // Add the parent node
+      const parentNode = graphNodes.find(n => n.id === parentNodeId);
+      if (parentNode && !sorted.some(n => n.id === parentNodeId)) {
+        sorted.push(parentNode);
+      }
+      
+      // Get all children
+      const children = childrenMap[parentNodeId] || [];
+      
+      // First process non-parent children
+      const nonParentChildren = children.filter(childId => !isParentNode(childId));
+      nonParentChildren.forEach(childId => {
+        const childNode = graphNodes.find(n => n.id === childId);
+        if (childNode && !sorted.some(n => n.id === childId)) {
+          sorted.push(childNode);
+        }
+      });
+      
+      // Then process parent children (follow the chain)
+      const parentChildren = children.filter(childId => isParentNode(childId));
+      parentChildren.forEach(childId => {
+        processParentChain(childId, processedNodes);
+      });
+    };
+    
+    // Process each primary parent and its chain
+    primaryParents.forEach(parentId => {
+      processParentChain(parentId, new Set<string>());
+    });
+    
+    // Make sure all nodes are included by adding any we missed
+    graphNodes.forEach(node => {
+      if (!sorted.some(n => n.id === node.id)) {
+        sorted.push(node);
+      }
+    });
+    
+    return sorted;
+  }, [edges, nodes]);
+
+  // Start the animation sequence for the current graph
+  const handleStartAnimation = useCallback(() => {
+    if (isAnimating || !menuNode) return;
+    
+    const graphId = menuNode.data.graphId;
+    
+    // Only proceed if this graph is hidden
+    if (!hiddenGraphIds.has(graphId)) return;
+    
+    // Prepare the animation sequence for this graph only
+    const nodesToAnimate = sortNodesForAnimation(nodes, graphId);
+    setAnimationNodes(nodesToAnimate);
+    setAnimationNodeIndex(0);
+    setVisibleNodeIds(new Set());
+    setIsAnimating(true);
+    setAnimatingGraphId(graphId);
+    
+    // Start with the first node (if available)
+    if (nodesToAnimate.length > 0) {
+      setCurrentAnimatingNode(nodesToAnimate[0]);
+      setVisibleNodeIds(new Set([nodesToAnimate[0].id]));
+    } else {
+      setIsAnimating(false);
+      setAnimatingGraphId(null);
+    }
+  }, [hiddenGraphIds, isAnimating, menuNode, nodes, sortNodesForAnimation]);
+
+  // Handle completion of a single node animation
+  const handleNodeAnimationComplete = useCallback(() => {
+    setCurrentAnimatingNode(null);
+    
+    // Short delay before moving to next node
+    setTimeout(() => {
+      const nextIndex = animationNodeIndex + 1;
+      
+      if (nextIndex < animationNodes.length) {
+        // Move to the next node
+        setAnimationNodeIndex(nextIndex);
+        setCurrentAnimatingNode(animationNodes[nextIndex]);
+        setVisibleNodeIds(prev => {
+          const newSet = new Set(prev);
+          newSet.add(animationNodes[nextIndex].id);
+          return newSet;
+        });
+      } else {
+        // Animation sequence completed for this graph
+        if (animatingGraphId) {
+          setHiddenGraphIds(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(animatingGraphId);
+            return newSet;
+          });
+        }
+        setIsAnimating(false);
+        setAnimatingGraphId(null);
+        setAnimationNodeIndex(0);
+        setAnimationNodes([]);
+        setVisibleNodeIds(new Set());
+      }
+    }, 300); // Reduced from 500ms for faster animation
+  }, [animationNodeIndex, animationNodes, animatingGraphId]);
+
+  // Filter nodes and edges based on visibility state
+  const filteredNodes = useMemo(() => {
+    if (!hiddenGraphIds.size && !isAnimating) {
+      return nodes;
+    }
+
+    return nodes.filter(node => {
+      const graphId = node.data.graphId;
+      const isRootNode = node.style?.background === '#e0f2e9';
+      const isMenuNode = menuNode && node.id === menuNode.id;
+      
+      // Always show nodes from non-hidden graphs
+      if (!hiddenGraphIds.has(graphId)) {
+        return true;
+      }
+      
+      // For hidden graphs that are not being animated
+      if (graphId !== animatingGraphId) {
+        return isRootNode || isMenuNode;
+      }
+      
+      // For the graph being animated
+      if (isAnimating && graphId === animatingGraphId) {
+        const isVisible = visibleNodeIds.has(node.id);
+        return isRootNode || isVisible || isMenuNode;
+      }
+      
+      // Default case for hidden graphs
+      return isRootNode || isMenuNode;
+    });
+  }, [nodes, hiddenGraphIds, menuNode, isAnimating, animatingGraphId, visibleNodeIds]);
+
+  const filteredEdges = useMemo(() => {
+    if (!hiddenGraphIds.size && !isAnimating) {
+      return edges;
+    }
+    
+    return edges.filter(edge => {
+      // First, find the source node to determine which graph this edge belongs to
+      const sourceNode = nodes.find(n => n.id === edge.source);
+      if (!sourceNode) return false;
+      
+      const graphId = sourceNode.data.graphId;
+      
+      // Always show edges from non-hidden graphs
+      if (!hiddenGraphIds.has(graphId)) {
+        return true;
+      }
+      
+      // Hide all edges for hidden graphs that are not being animated
+      if (graphId !== animatingGraphId) {
+        return false;
+      }
+      
+      // For the graph being animated, only show edges where both nodes are visible
+      if (isAnimating && graphId === animatingGraphId) {
+        const sourceVisible = visibleNodeIds.has(edge.source) || sourceNode.style?.background === '#e0f2e9';
+        const targetNode = nodes.find(n => n.id === edge.target);
+        const targetVisible = targetNode && (visibleNodeIds.has(edge.target) || targetNode.style?.background === '#e0f2e9');
+        return sourceVisible && targetVisible;
+      }
+      
+      // Default case for hidden graphs
+      return false;
+    });
+  }, [edges, nodes, hiddenGraphIds, isAnimating, animatingGraphId, visibleNodeIds]);
+
+  const handleCloseMultiNodeColorMenu = useCallback(() => {
+    setIsMultiNodeColorMenuOpen(false);
+    setMultiEditMode(false);
+  }, [setMultiEditMode]);
+
   if (isLoading) {
     return <div className="flex h-screen w-full items-center justify-center">Loading...</div>;
   }
@@ -531,9 +818,14 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
         onClose={handleCloseInfoDialog}
         userId={userId}
       />
+      <MultiNodeColorMenu
+        userId={userId}
+        isOpen={isMultiNodeColorMenuOpen}
+        onClose={handleCloseMultiNodeColorMenu}
+      />
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={filteredNodes}
+        edges={filteredEdges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
@@ -549,6 +841,9 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
         minZoom={0.1}
         maxZoom={4}
         attributionPosition="bottom-right"
+        multiSelectionKeyCode="Control"
+        selectionOnDrag={false}
+        selectionMode={isMultiEditMode ? SelectionMode.Partial : SelectionMode.Full}
         className={`${isPlacementMode || isRootNodeCreationMode || isNewNodeCreationMode || isEdgeCreationMode ? 'cursor-crosshair' : ''} ${selectedGraphId ? 'cursor-move' : ''}`}
       >
         <Background />
@@ -558,6 +853,15 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
             node={menuNode}
             onInfoClick={() => handleOpenInfoDialog(menuNode)}
             onClose={handleCloseMenu}
+            onToggleVisibility={handleToggleVisibility}
+            onStartAnimation={handleStartAnimation}
+            areNodesHidden={hiddenGraphIds.has(menuNode.data.graphId)}
+          />
+        )}
+        {currentAnimatingNode && (
+          <NodeInfoPopup
+            node={currentAnimatingNode}
+            onAnimationComplete={handleNodeAnimationComplete}
           />
         )}
         <RootNodeTitle graphs={graphs} nodes={nodes} />
@@ -569,6 +873,11 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
               {selectedGraphId && (
                 <div className="text-blue-600">
                   Graph selected - Moving entire graph
+                </div>
+              )}
+              {selectedNodes.length > 0 && (
+                <div className="text-green-600">
+                  {selectedNodes.length} node{selectedNodes.length !== 1 ? 's' : ''} selected
                 </div>
               )}
             </div>
