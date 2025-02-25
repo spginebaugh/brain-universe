@@ -471,7 +471,7 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
               tags: []
             },
             content: {
-              text: '',
+              mainText: '',
               resources: []
             },
             nodePosition: relativePosition

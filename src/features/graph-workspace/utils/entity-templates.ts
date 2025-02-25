@@ -20,7 +20,7 @@ export const createNewNode = (
     tags: []
   },
   content: {
-    text: '',
+    mainText: '',
     resources: []
   },
   nodePosition: position

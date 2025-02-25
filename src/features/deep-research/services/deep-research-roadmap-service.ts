@@ -272,16 +272,40 @@ export class DeepResearchRoadmapService {
     const nodeId = store.generatedNodeIds[currentChapterTitle];
     if (!nodeId) return;
     
+    // Debug log to see what we're working with
+    console.log('Updating chapter:', currentChapterTitle);
+    console.log('Chapter data:', JSON.stringify({
+      title: chapter.title,
+      status: chapter.status,
+      hasContent: !!chapter.content,
+      contentKeys: chapter.content ? Object.keys(chapter.content) : [],
+      hasResearch: !!chapter.research,
+      resultsCount: chapter.research?.results?.length || 0,
+      queriesCount: chapter.research?.queries?.length || 0,
+      subTopicCount: chapter.content?.subTopics ? Object.keys(chapter.content.subTopics).length : 0
+    }));
+    
     // Update chapter node with completed content
     const chapterUpdate = updateCompletedChapter(chapter);
+    
+    // Debug log to check what data the system is actually reading
+    console.log(`Checking node fields in updateChapterAndCreateSubtopics:`, {
+      nodeId,
+      fieldsInContent: Object.keys(chapterUpdate.content || {}),
+      chapterTitle: chapter.title,
+      hasResourcesArray: Array.isArray(chapterUpdate.content?.resources),
+      resourcesCount: (chapterUpdate.content?.resources as { title: string; url: string; type: string }[] || []).length
+    });
     
     try {
       // Update chapter node with completed content
       await this.graphService.updateNode(options.graphId, nodeId, chapterUpdate);
+      console.log(`Updated chapter node ${nodeId} for ${currentChapterTitle}`);
       
       // Update subtopic nodes with real content, don't create new ones
       if (chapter.content.subTopics) {
         const subTopicNames = Object.keys(chapter.content.subTopics);
+        console.log(`Found ${subTopicNames.length} subtopics to update`);
         
         // Update each subtopic node with the completed content
         for (const subTopicName of subTopicNames) {
@@ -293,6 +317,31 @@ export class DeepResearchRoadmapService {
           }
           
           const subTopic = chapter.content.subTopics[subTopicName];
+          console.log(`Updating subtopic: ${subTopicName}`, JSON.stringify({
+            title: subTopic.title,
+            description: subTopic.description?.substring(0, 50) || '(no description)',
+            contentLength: subTopic.content?.length || 0,
+            sourcesCount: subTopic.sources?.length || 0
+          }));
+          
+          // Find any research results specifically for this subtopic
+          const subtopicResults = chapter.research?.results?.filter(
+            result => result.targetSubTopic === subTopicName
+          ) || [];
+          
+          // Find any research queries specifically for this subtopic
+          const subtopicQueries = chapter.research?.queries?.filter(
+            query => query.targetSubTopic === subTopicName
+          ).map(q => q.query) || [];
+          
+          console.log(`Found ${subtopicResults.length} results and ${subtopicQueries.length} queries for subtopic ${subTopicName}`);
+          
+          // Prepare the main text content with queries included
+          let mainTextContent = subTopic.content || '';
+          if (subtopicQueries.length > 0) {
+            const queriesText = subtopicQueries.join('\n');
+            mainTextContent = `${mainTextContent}\n\nResearch Queries:\n${queriesText}`;
+          }
           
           // Create the update for the subtopic node
           const subtopicUpdate = {
@@ -302,12 +351,23 @@ export class DeepResearchRoadmapService {
               type: 'concept'
             },
             content: {
-              mainText: subTopic.content || '',
-              resources: subTopic.sources?.map(src => ({
-                title: src.title,
-                url: src.url,
-                type: 'link'
-              })) || []
+              mainText: mainTextContent,
+              resources: [
+                // Include subtopic-specific sources
+                ...(subTopic.sources?.map(src => ({
+                  title: src.title,
+                  url: src.url,
+                  type: 'link'
+                })) || []),
+                // Include subtopic-specific research results
+                ...subtopicResults.map(result => ({
+                  title: result.title,
+                  url: result.url,
+                  type: 'link'
+                }))
+              ],
+              // Store research queries directly in the content
+              researchQueries: subtopicQueries
             },
             metadata: {
               status: 'active' as NodeStatus,
@@ -315,8 +375,14 @@ export class DeepResearchRoadmapService {
             }
           };
           
+          // Log the update we're about to make
+          console.log(`Updating subtopic node ${subtopicNodeId} with data length: ${
+            JSON.stringify(subtopicUpdate).length
+          } characters`);
+          
           // Update the subtopic node in the database
           await this.graphService.updateNode(options.graphId, subtopicNodeId, subtopicUpdate);
+          console.log(`Successfully updated subtopic node ${subtopicNodeId} for ${subTopicName}`);
         }
       }
     } catch (error) {

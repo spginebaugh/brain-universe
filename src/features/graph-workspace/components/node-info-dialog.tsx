@@ -312,7 +312,7 @@ export const NodeInfoDialog = ({ node, isOpen, onClose, userId }: NodeInfoDialog
                   <div>
                     <p className="text-sm text-gray-500 mb-1">Main Text:</p>
                     <Textarea
-                      value={content.mainText || ''}
+                      value={(content.mainText as string) || (content.text as string) || ''}
                       onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => 
                         handleInputChange('content', 'mainText', e.target.value)
                       }
@@ -320,11 +320,15 @@ export const NodeInfoDialog = ({ node, isOpen, onClose, userId }: NodeInfoDialog
                       className="min-h-[200px]"
                     />
                   </div>
-                ) : content.mainText && (
-                  <div>
-                    <p className="text-sm text-gray-500 mb-1">Main Text:</p>
-                    <p className="whitespace-pre-wrap">{content.mainText}</p>
-                  </div>
+                ) : (
+                  <>
+                    {((content.mainText as string) || (content.text as string)) && (
+                      <div>
+                        <p className="text-sm text-gray-500 mb-1">Main Text:</p>
+                        <p className="whitespace-pre-wrap">{(content.mainText as string) || (content.text as string)}</p>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {content.sections && Object.entries(content.sections).length > 0 && (

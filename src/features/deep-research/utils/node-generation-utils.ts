@@ -92,6 +92,7 @@ export function generatePlaceholderNodesFromChapters(
         content: {
           mainText: chapter.description || 'Loading...',
           resources: [],
+          researchQueries: [] // Prepare for storing research queries
         },
         sourcePosition,
         targetPosition,
@@ -112,6 +113,15 @@ export function generatePlaceholderNodesFromChapters(
     dbNode.properties.sourcePosition = sourcePositionDb;
     dbNode.properties.targetPosition = targetPositionDb;
     dbNode.metadata.status = 'in_progress';
+    
+    // Prepare content structure for research data
+    dbNode.content = {
+      ...dbNode.content,
+      mainText: chapter.description || 'Loading...',
+      resources: [],
+      researchQueries: [] // Prepare for storing research queries
+    };
+    
     dbNodes.push(dbNode);
     
     // Create edge from parent to this node
@@ -282,6 +292,7 @@ export function generateSubtopicNodesForChapter(
             url: src.url,
             type: 'link'
           })) || [],
+          researchQueries: [] // Prepare for storing research queries
         },
       },
       sourcePosition: sourcePosition,
@@ -307,7 +318,8 @@ export function generateSubtopicNodesForChapter(
           title: src.title,
           url: src.url,
           type: 'link'
-        })) || []
+        })) || [],
+        researchQueries: [] // Prepare for storing research queries
       };
     }
     
@@ -339,6 +351,16 @@ export function generateSubtopicNodesForChapter(
 export function updateCompletedChapter(
   chapter: Chapter
 ): Partial<DbNode> {
+  // Debug log to check incoming data
+  console.log('updateCompletedChapter input:', JSON.stringify({
+    title: chapter.title,
+    hasContent: !!chapter.content,
+    hasResearch: !!chapter.research,
+    resultsCount: chapter.research?.results?.length || 0,
+    queriesCount: chapter.research?.queries?.length || 0,
+    subTopicsCount: chapter.content?.subTopics ? Object.keys(chapter.content.subTopics).length : 0
+  }));
+  
   // Extract content from the research data
   const chapterContent = chapter.content;
   
@@ -351,15 +373,17 @@ export function updateCompletedChapter(
     };
   }
   
-  // Update the node with the content from research
-  return {
+  // Create a more reliable structure for the node update
+  const nodeUpdate: Partial<DbNode> = {
     properties: {
       title: chapter.title,
       description: chapter.description || '',
       type: 'concept'
     } as NodeProperties,
     content: {
+      // Store the chapter overview as mainText
       mainText: chapterContent.overview || '',
+      // Initialize resources as an empty array to avoid null/undefined issues
       resources: []
     },
     metadata: {
@@ -367,4 +391,54 @@ export function updateCompletedChapter(
       tags: []
     } as NodeMetadata
   };
+  
+  // Ensure resources is always initialized as an array
+  if (!Array.isArray(nodeUpdate.content?.resources)) {
+    nodeUpdate.content = nodeUpdate.content || {};
+    nodeUpdate.content.resources = [];
+  }
+  
+  // Add research results as resources
+  if (chapter.research?.results && chapter.research.results.length > 0 && nodeUpdate.content) {
+    const resources = nodeUpdate.content.resources as Array<{title: string; url: string; type: string}>;
+    for (const result of chapter.research.results) {
+      // Only add if we have a title and URL
+      if (result.title && result.url) {
+        resources.push({
+          title: result.title,
+          url: result.url,
+          type: 'link'
+        });
+      }
+    }
+  }
+  
+  // Create a structured section for research queries instead of appending to mainText
+  if (chapter.research?.queries && chapter.research.queries.length > 0) {
+    const queriesText = chapter.research.queries
+      .map(q => `${q.purpose}: ${q.query || ''}`)
+      .join('\n');
+    
+    // Add queries as a separate section in content
+    nodeUpdate.content = nodeUpdate.content || {};
+    nodeUpdate.content.researchQueries = chapter.research.queries.map(q => q.query);
+    
+    // Append queries to mainText in a structured way
+    if (nodeUpdate.content.mainText) {
+      nodeUpdate.content.mainText += '\n\n## Research Queries\n' + queriesText;
+    }
+  }
+  
+  // Debug log to see what we're returning
+  console.log('Node update structure:', JSON.stringify({
+    hasProperties: !!nodeUpdate.properties,
+    hasContent: !!nodeUpdate.content,
+    contentFields: nodeUpdate.content ? Object.keys(nodeUpdate.content) : [],
+    resourcesCount: nodeUpdate.content?.resources 
+      ? (nodeUpdate.content.resources as Array<{title: string; url: string; type: string}>).length 
+      : 0,
+    mainTextLength: nodeUpdate.content?.mainText?.length || 0
+  }));
+  
+  return nodeUpdate;
 } 
