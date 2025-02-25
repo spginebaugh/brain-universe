@@ -35,6 +35,7 @@ import { DbNode, DbEdge } from '@/shared/types/db-types';
 import { NodeInfoDialog } from './node-info-dialog';
 import { NodeMenu } from './node-menu';
 import { NodeInfoPopup } from './node-info-popup';
+import { useNodeRevealAnimation } from '../hooks/use-node-reveal-animation';
 import {
   transformGraphsToReactFlow,
   calculateRelativePosition,
@@ -156,17 +157,49 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
   const [connectingNodeId, setConnectingNodeId] = useState<string | null>(null);
   const [menuNode, setMenuNode] = useState<Node<FlowNodeData> | null>(null);
   const [hiddenGraphIds, setHiddenGraphIds] = useState<Set<string>>(new Set());
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [animatingGraphId, setAnimatingGraphId] = useState<string | null>(null);
-  const [animationNodeIndex, setAnimationNodeIndex] = useState(0);
-  const [animationNodes, setAnimationNodes] = useState<Node<FlowNodeData>[]>([]);
-  const [visibleNodeIds, setVisibleNodeIds] = useState<Set<string>>(new Set());
-  const [currentAnimatingNode, setCurrentAnimatingNode] = useState<Node<FlowNodeData> | null>(null);
   const [isMultiNodeColorMenuOpen, setIsMultiNodeColorMenuOpen] = useState(false);
   
   // Initialize node and edge states with correct types
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<FlowNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge<FlowEdgeData>>([]);
+
+  // Use the animation hook
+  const {
+    isAnimating,
+    filteredNodes,
+    filteredEdges,
+    startAnimation,
+    handleNodeAnimationComplete,
+    currentlyAnimatingNodeIds,
+    nodesWithPopups
+  } = useNodeRevealAnimation({
+    nodes,
+    edges,
+    hiddenGraphIds,
+    setHiddenGraphIds,
+    menuNode
+  });
+
+  // Handle parallel animations for nodes without visible tooltips
+  useEffect(() => {
+    if (!isAnimating || !currentlyAnimatingNodeIds.size) return;
+    
+    // Process all animating nodes except those with visible popups
+    const nodesToAnimate = Array.from(currentlyAnimatingNodeIds).filter(
+      nodeId => !nodesWithPopups.some(node => node.id === nodeId)
+    );
+    
+    // Set a timeout to trigger completion for each node without a popup
+    const timeouts = nodesToAnimate.map(nodeId => {
+      // Use a shorter timeout (200ms) for non-visible nodes to keep animations flowing
+      return setTimeout(() => handleNodeAnimationComplete(nodeId), 200);
+    });
+    
+    // Clean up timeouts on unmount
+    return () => {
+      timeouts.forEach(timeout => clearTimeout(timeout));
+    };
+  }, [currentlyAnimatingNodeIds, nodesWithPopups, handleNodeAnimationComplete, isAnimating]);
 
   // Track selected nodes
   useOnSelectionChange({
@@ -556,9 +589,9 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
     [connectingNodeId, reactFlowInstance, nodes, graphs, graphService, refresh]
   );
 
-  // Function to toggle visibility of non-root nodes and edges in the current graph
+  // Toggle visibility handler for the node menu
   const handleToggleVisibility = useCallback(() => {
-    if (isAnimating || !menuNode) return; // Prevent toggling while animation is in progress
+    if (isAnimating || !menuNode) return;
     
     const graphId = menuNode.data.graphId;
     
@@ -573,225 +606,13 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
     });
   }, [isAnimating, menuNode]);
 
-  // Function to sort nodes in the desired order for animation
-  const sortNodesForAnimation = useCallback((nodes: Node<FlowNodeData>[], graphId: string) => {
-    const sorted: Node<FlowNodeData>[] = [];
-    
-    // Get all nodes for this graph
-    const graphNodes = nodes.filter(node => node.data.graphId === graphId);
-    
-    // Find the root node for this graph
-    const rootNode = graphNodes.find(node => node.style?.background === '#e0f2e9');
-    if (!rootNode) return graphNodes; // Fallback if no root node found
-    
-    // Get all edges for this graph to understand connections
-    const graphEdges = edges.filter(edge => {
-      const sourceNode = nodes.find(n => n.id === edge.source);
-      return sourceNode && sourceNode.data.graphId === graphId;
-    });
-    
-    // Build a map of parent to children relationships
-    const childrenMap: Record<string, string[]> = {};
-    const parentMap: Record<string, string> = {};
-    
-    // Initialize for all nodes
-    graphNodes.forEach(node => {
-      childrenMap[node.id] = [];
-    });
-    
-    // Populate the maps using edges
-    graphEdges.forEach(edge => {
-      // Add child to parent's children list
-      if (childrenMap[edge.source]) {
-        childrenMap[edge.source].push(edge.target);
-      }
-      
-      // Record parent of child
-      parentMap[edge.target] = edge.source;
-    });
-    
-    // Function to check if a node is a parent (has children)
-    const isParentNode = (nodeId: string) => childrenMap[nodeId]?.length > 0;
-    
-    // First add the root node
-    sorted.push(rootNode);
-    
-    // Find the primary parent node (directly connected to root)
-    const primaryParents = childrenMap[rootNode.id] || [];
-    
-    // Function to process a parent node and its children
-    const processParentChain = (parentNodeId: string, processedNodes = new Set<string>()) => {
-      if (processedNodes.has(parentNodeId)) return; // Prevent cycles
-      processedNodes.add(parentNodeId);
-      
-      // Add the parent node
-      const parentNode = graphNodes.find(n => n.id === parentNodeId);
-      if (parentNode && !sorted.some(n => n.id === parentNodeId)) {
-        sorted.push(parentNode);
-      }
-      
-      // Get all children
-      const children = childrenMap[parentNodeId] || [];
-      
-      // First process non-parent children
-      const nonParentChildren = children.filter(childId => !isParentNode(childId));
-      nonParentChildren.forEach(childId => {
-        const childNode = graphNodes.find(n => n.id === childId);
-        if (childNode && !sorted.some(n => n.id === childId)) {
-          sorted.push(childNode);
-        }
-      });
-      
-      // Then process parent children (follow the chain)
-      const parentChildren = children.filter(childId => isParentNode(childId));
-      parentChildren.forEach(childId => {
-        processParentChain(childId, processedNodes);
-      });
-    };
-    
-    // Process each primary parent and its chain
-    primaryParents.forEach(parentId => {
-      processParentChain(parentId, new Set<string>());
-    });
-    
-    // Make sure all nodes are included by adding any we missed
-    graphNodes.forEach(node => {
-      if (!sorted.some(n => n.id === node.id)) {
-        sorted.push(node);
-      }
-    });
-    
-    return sorted;
-  }, [edges, nodes]);
-
-  // Start the animation sequence for the current graph
+  // Start the animation when requested from the menu
   const handleStartAnimation = useCallback(() => {
-    if (isAnimating || !menuNode) return;
-    
-    const graphId = menuNode.data.graphId;
-    
-    // Only proceed if this graph is hidden
-    if (!hiddenGraphIds.has(graphId)) return;
-    
-    // Prepare the animation sequence for this graph only
-    const nodesToAnimate = sortNodesForAnimation(nodes, graphId);
-    setAnimationNodes(nodesToAnimate);
-    setAnimationNodeIndex(0);
-    setVisibleNodeIds(new Set());
-    setIsAnimating(true);
-    setAnimatingGraphId(graphId);
-    
-    // Start with the first node (if available)
-    if (nodesToAnimate.length > 0) {
-      setCurrentAnimatingNode(nodesToAnimate[0]);
-      setVisibleNodeIds(new Set([nodesToAnimate[0].id]));
-    } else {
-      setIsAnimating(false);
-      setAnimatingGraphId(null);
-    }
-  }, [hiddenGraphIds, isAnimating, menuNode, nodes, sortNodesForAnimation]);
-
-  // Handle completion of a single node animation
-  const handleNodeAnimationComplete = useCallback(() => {
-    setCurrentAnimatingNode(null);
-    
-    // Short delay before moving to next node
-    setTimeout(() => {
-      const nextIndex = animationNodeIndex + 1;
-      
-      if (nextIndex < animationNodes.length) {
-        // Move to the next node
-        setAnimationNodeIndex(nextIndex);
-        setCurrentAnimatingNode(animationNodes[nextIndex]);
-        setVisibleNodeIds(prev => {
-          const newSet = new Set(prev);
-          newSet.add(animationNodes[nextIndex].id);
-          return newSet;
-        });
-      } else {
-        // Animation sequence completed for this graph
-        if (animatingGraphId) {
-          setHiddenGraphIds(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(animatingGraphId);
-            return newSet;
-          });
-        }
-        setIsAnimating(false);
-        setAnimatingGraphId(null);
-        setAnimationNodeIndex(0);
-        setAnimationNodes([]);
-        setVisibleNodeIds(new Set());
-      }
-    }, 300); // Reduced from 500ms for faster animation
-  }, [animationNodeIndex, animationNodes, animatingGraphId]);
-
-  // Filter nodes and edges based on visibility state
-  const filteredNodes = useMemo(() => {
-    if (!hiddenGraphIds.size && !isAnimating) {
-      return nodes;
-    }
-
-    return nodes.filter(node => {
-      const graphId = node.data.graphId;
-      const isRootNode = node.style?.background === '#e0f2e9';
-      const isMenuNode = menuNode && node.id === menuNode.id;
-      
-      // Always show nodes from non-hidden graphs
-      if (!hiddenGraphIds.has(graphId)) {
-        return true;
-      }
-      
-      // For hidden graphs that are not being animated
-      if (graphId !== animatingGraphId) {
-        return isRootNode || isMenuNode;
-      }
-      
-      // For the graph being animated
-      if (isAnimating && graphId === animatingGraphId) {
-        const isVisible = visibleNodeIds.has(node.id);
-        return isRootNode || isVisible || isMenuNode;
-      }
-      
-      // Default case for hidden graphs
-      return isRootNode || isMenuNode;
-    });
-  }, [nodes, hiddenGraphIds, menuNode, isAnimating, animatingGraphId, visibleNodeIds]);
-
-  const filteredEdges = useMemo(() => {
-    if (!hiddenGraphIds.size && !isAnimating) {
-      return edges;
-    }
-    
-    return edges.filter(edge => {
-      // First, find the source node to determine which graph this edge belongs to
-      const sourceNode = nodes.find(n => n.id === edge.source);
-      if (!sourceNode) return false;
-      
-      const graphId = sourceNode.data.graphId;
-      
-      // Always show edges from non-hidden graphs
-      if (!hiddenGraphIds.has(graphId)) {
-        return true;
-      }
-      
-      // Hide all edges for hidden graphs that are not being animated
-      if (graphId !== animatingGraphId) {
-        return false;
-      }
-      
-      // For the graph being animated, only show edges where both nodes are visible
-      if (isAnimating && graphId === animatingGraphId) {
-        const sourceVisible = visibleNodeIds.has(edge.source) || sourceNode.style?.background === '#e0f2e9';
-        const targetNode = nodes.find(n => n.id === edge.target);
-        const targetVisible = targetNode && (visibleNodeIds.has(edge.target) || targetNode.style?.background === '#e0f2e9');
-        return sourceVisible && targetVisible;
-      }
-      
-      // Default case for hidden graphs
-      return false;
-    });
-  }, [edges, nodes, hiddenGraphIds, isAnimating, animatingGraphId, visibleNodeIds]);
+    if (!menuNode) return;
+    startAnimation(menuNode.data.graphId);
+    // Hide the menu after starting animation
+    setMenuNode(null);
+  }, [menuNode, startAnimation]);
 
   const handleCloseMultiNodeColorMenu = useCallback(() => {
     setIsMultiNodeColorMenuOpen(false);
@@ -858,12 +679,14 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
             areNodesHidden={hiddenGraphIds.has(menuNode.data.graphId)}
           />
         )}
-        {currentAnimatingNode && (
+        {/* Render a NodeInfoPopup for each node in the nodesWithPopups array */}
+        {nodesWithPopups.map(node => (
           <NodeInfoPopup
-            node={currentAnimatingNode}
+            key={node.id}
+            node={node}
             onAnimationComplete={handleNodeAnimationComplete}
           />
-        )}
+        ))}
         <RootNodeTitle graphs={graphs} nodes={nodes} />
         <Panel position="top-left">
           <div className="space-y-2">

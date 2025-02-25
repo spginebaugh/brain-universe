@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/shared/components/ui
 
 interface NodeInfoPopupProps {
   node: Node<FlowNodeData>;
-  onAnimationComplete: () => void;
+  onAnimationComplete: (nodeId: string) => void;
 }
 
 export const NodeInfoPopup = ({ node, onAnimationComplete }: NodeInfoPopupProps) => {
@@ -36,7 +36,7 @@ export const NodeInfoPopup = ({ node, onAnimationComplete }: NodeInfoPopupProps)
       const fadeInTimer = setTimeout(() => {
         setOpacity(1);
         setAnimationStage('title');
-      }, 300); // Reduced timing
+      }, 900); // Reduced timing
       
       return () => clearTimeout(fadeInTimer);
     }
@@ -78,13 +78,13 @@ export const NodeInfoPopup = ({ node, onAnimationComplete }: NodeInfoPopupProps)
     const titleInterval = setInterval(() => {
       if (currentIndex < title.length) {
         setDisplayedTitle(title.substring(0, currentIndex + 1));
-        currentIndex += 5; // Increased from 2 to 5 characters at once
+        currentIndex += 8; // Increased from 5 to 8 characters at once for faster animation
       } else {
         setDisplayedTitle(title); // Ensure the full title is displayed
         clearInterval(titleInterval);
         setAnimationStage('description');
       }
-    }, 1); // Decreased from 10ms to 1ms
+    }, 5); // Keep at minimum interval for fastest animation
     
     return () => clearInterval(titleInterval);
   }, [title, animationStage]);
@@ -97,13 +97,13 @@ export const NodeInfoPopup = ({ node, onAnimationComplete }: NodeInfoPopupProps)
     const descriptionInterval = setInterval(() => {
       if (currentIndex < description.length) {
         setDisplayedDescription(description.substring(0, currentIndex + 1));
-        currentIndex += 10; // Increased from 3 to 10 characters at once
+        currentIndex += 15; // Increased from 10 to 15 characters at once for faster animation
       } else {
         setDisplayedDescription(description); // Ensure the full description is displayed
         clearInterval(descriptionInterval);
         setAnimationStage('content');
       }
-    }, 1); // Decreased from 5ms to 1ms
+    }, 1); // Keep at minimum interval for fastest animation
     
     return () => clearInterval(descriptionInterval);
   }, [description, animationStage]);
@@ -116,7 +116,7 @@ export const NodeInfoPopup = ({ node, onAnimationComplete }: NodeInfoPopupProps)
     setDisplayedContent('');
     
     // Much larger chunk size for ultra-fast animation
-    const chunkSize = Math.max(20, Math.floor(mainText.length / 50)); // Much larger chunks
+    const chunkSize = Math.max(40, Math.floor(mainText.length / 25)); // Doubled chunk size for faster animation
     let currentIndex = 0;
     
     const contentInterval = setInterval(() => {
@@ -127,12 +127,13 @@ export const NodeInfoPopup = ({ node, onAnimationComplete }: NodeInfoPopupProps)
       } else {
         clearInterval(contentInterval);
         setAnimationStage('complete');
-        setTimeout(onAnimationComplete, 800); // Reduced from 800ms to 400ms
+        // Reduced delay before completion callback for faster parallel animations
+        setTimeout(() => onAnimationComplete(node.id), 250);
       }
     }, 1); // Keep the fastest possible interval
     
     return () => clearInterval(contentInterval);
-  }, [mainText, animationStage, onAnimationComplete]);
+  }, [mainText, animationStage, onAnimationComplete, node.id]);
   
   // This effect runs after EVERY render to ensure scrolling is always at the bottom
   useLayoutEffect(() => {

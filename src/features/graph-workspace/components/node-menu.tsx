@@ -1,4 +1,4 @@
-import { Info, Bot, EyeOff, Eye, PlayCircle } from 'lucide-react';
+import { Info, Bot, EyeOff, Eye, BrainCircuit } from 'lucide-react';
 import { Button } from '@/shared/components/ui/button';
 import { Node, useReactFlow, useStoreApi } from '@xyflow/react';
 import { FlowNodeData } from '../types/workspace-types';
@@ -97,7 +97,7 @@ export const NodeMenu = ({ node, onInfoClick, onClose, onToggleVisibility, onSta
             onClick={onStartAnimation}
             title="Animate node reveal sequence"
           >
-            <PlayCircle className="h-4 w-4" />
+            <BrainCircuit className="h-4 w-4" />
           </Button>
         )}
       </div>
