@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogTitle, DialogFooter } from '@/shared/compo
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
 import { Button } from '@/shared/components/ui/button';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { GraphService } from '@/shared/services/firebase/graph-service';
 import { DbNode, DbEdge } from '@/shared/types/db-types';
 import { toast } from 'sonner';
@@ -14,6 +14,11 @@ import { calculateRelativePosition } from '../../graph-workspace/utils/position-
 import { useGraphWorkspace } from '../../graph-workspace/hooks/use-graph-workspace';
 import { useAIRoadmap } from '../hooks/use-ai-roadmap';
 import { RoadmapContent } from '../types/ai-roadmap-types';
+import { useDeepResearchRoadmap } from '../../deep-research/hooks/use-deep-research-roadmap';
+import { DeepResearchRoadmapService } from '../../deep-research/services/deep-research-roadmap-service';
+import { DeepResearchRoadmapDialog } from '../../deep-research/components/deep-research-roadmap-dialog';
+import { RoadmapGenerationInput } from '../../deep-research/services/deep-research-roadmap-service';
+import { useDeepResearchRoadmapStore } from '../../deep-research/stores/deep-research-roadmap-store';
 
 interface RoadmapGenerationProps {
   node: Node<FlowNodeData>;
@@ -34,8 +39,27 @@ export const RoadmapGeneration = ({
   const [numNodes, setNumNodes] = useState<number>(5);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isAIGenerating, setIsAIGenerating] = useState(false);
+  const [isDeepResearchDialogOpen, setIsDeepResearchDialogOpen] = useState(false);
   const { graphs } = useGraphWorkspace(auth?.currentUser?.uid || '');
   const { generateRoadmap, error: aiError } = useAIRoadmap();
+  
+  // Deep research states and hooks
+  const { 
+    isLoading: isDeepResearchLoading,
+    error: deepResearchError,
+    startDeepResearch,
+    reset: resetDeepResearch
+  } = useDeepResearchRoadmap({
+    onPhaseChange: (phase, progress) => {
+      console.log(`Deep research phase change: ${phase} - Progress: ${progress}%`);
+    }
+  });
+  
+  // Deep research roadmap service
+  const [deepResearchService, setDeepResearchService] = useState<DeepResearchRoadmapService | null>(null);
+  
+  // Get the deep research store to monitor progress
+  const deepResearchStore = useDeepResearchRoadmapStore();
 
   const generateNodeStructure = async (
     isAIGenerated: boolean,
@@ -354,42 +378,152 @@ export const RoadmapGeneration = ({
     }
   };
 
+  const handleGenerateDeepResearchRoadmap = async () => {
+    if (!isRootNode || numNodes < 1 || numNodes > 20) return;
+    
+    const currentUser = auth?.currentUser;
+    if (!currentUser) {
+      toast.error('You must be logged in to generate a roadmap');
+      return;
+    }
+
+    const parentGraph = graphs.find(g => g.graphId === node.data.graphId);
+    if (!parentGraph) {
+      toast.error('Parent graph not found');
+      return;
+    }
+
+    // Create deep research service
+    const service = new DeepResearchRoadmapService(currentUser.uid);
+    setDeepResearchService(service);
+    
+    // Reset the deep research store state
+    resetDeepResearch();
+    
+    // Show dialog immediately
+    setIsDeepResearchDialogOpen(true);
+    
+    // Start deep research in parallel with hook
+    try {
+      // Start the hook for tracking state
+      await startDeepResearch({
+        query: node.data.properties.title || '',
+        numberOfChapters: numNodes
+      });
+      
+      // Generate the roadmap using the service
+      const roadmapInput: RoadmapGenerationInput = {
+        rootNodeId: node.id,
+        rootNodePosition: node.position,
+        rootNodeTitle: node.data.properties.title || '',
+        graphId: node.data.graphId,
+        graphName: node.data.graphName || '',
+        graphPosition: parentGraph.graphPosition,
+        numberOfChapters: numNodes,
+        userId: currentUser.uid
+      };
+      
+      // Run the roadmap generation
+      await service.generateRoadmap(roadmapInput);
+      
+    } catch (error) {
+      console.error('Failed to generate deep research roadmap:', error);
+      toast.error(deepResearchError || 'Failed to generate deep research roadmap');
+    }
+  };
+
+  const handleDeepResearchCancel = () => {
+    if (deepResearchService) {
+      deepResearchService.cancel();
+    }
+    resetDeepResearch();
+    setIsDeepResearchDialogOpen(false);
+  };
+
+  const handleDeepResearchComplete = () => {
+    toast.success('Deep research roadmap generated successfully');
+    setIsDeepResearchDialogOpen(false);
+    onOpenChange(false);
+    onClose();
+  };
+
+  // Monitor the deep research store to automatically close the dialog when finished
+  useEffect(() => {
+    if (!isDeepResearchDialogOpen) return;
+    
+    const isComplete = !deepResearchStore.isLoading && deepResearchStore.progress === 100;
+    const hasError = !!deepResearchStore.error;
+    
+    if (isComplete || hasError) {
+      // Auto-close after a short delay
+      const timer = setTimeout(() => {
+        if (isComplete) {
+          handleDeepResearchComplete();
+        }
+      }, 2000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [
+    isDeepResearchDialogOpen,
+    deepResearchStore.isLoading,
+    deepResearchStore.progress,
+    deepResearchStore.error
+  ]);
+
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogTitle>Generate Roadmap</DialogTitle>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="numNodes" className="col-span-2">
-              Number of Main Topics (1-20)
-            </Label>
-            <Input
-              id="numNodes"
-              type="number"
-              min={1}
-              max={20}
-              value={numNodes}
-              onChange={(e) => setNumNodes(Number(e.target.value))}
-              className="col-span-2"
-            />
+    <>
+      <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogTitle>Generate Roadmap</DialogTitle>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="numNodes" className="col-span-2">
+                Number of Main Topics (1-20)
+              </Label>
+              <Input
+                id="numNodes"
+                type="number"
+                min={1}
+                max={20}
+                value={numNodes}
+                onChange={(e) => setNumNodes(Number(e.target.value))}
+                className="col-span-2"
+              />
+            </div>
           </div>
-        </div>
-        <DialogFooter className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={handleGenerateTemplate}
-            disabled={isGenerating || isAIGenerating}
-          >
-            {isGenerating ? 'Generating Template...' : 'Generate Roadmap Template'}
-          </Button>
-          <Button
-            onClick={handleGenerateAIRoadmap}
-            disabled={isGenerating || isAIGenerating}
-          >
-            {isAIGenerating ? 'Generating AI Roadmap...' : 'Generate AI Roadmap'}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter className="flex gap-2 flex-wrap">
+            <Button
+              variant="outline"
+              onClick={handleGenerateTemplate}
+              disabled={isGenerating || isAIGenerating || isDeepResearchLoading}
+            >
+              {isGenerating ? 'Generating Template...' : 'Generate Roadmap Template'}
+            </Button>
+            <Button
+              onClick={handleGenerateAIRoadmap}
+              disabled={isGenerating || isAIGenerating || isDeepResearchLoading}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              {isAIGenerating ? 'Generating AI Roadmap...' : 'Generate AI Roadmap'}
+            </Button>
+            <Button
+              onClick={handleGenerateDeepResearchRoadmap}
+              disabled={isGenerating || isAIGenerating || isDeepResearchLoading}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isDeepResearchLoading ? 'Researching...' : 'Generate Deep Research Template'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <DeepResearchRoadmapDialog
+        isOpen={isDeepResearchDialogOpen}
+        onOpenChange={setIsDeepResearchDialogOpen}
+        onCancel={handleDeepResearchCancel}
+        onComplete={handleDeepResearchComplete}
+      />
+    </>
   );
 }; 
