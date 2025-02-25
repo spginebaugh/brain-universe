@@ -398,6 +398,12 @@ export function updateCompletedChapter(
     nodeUpdate.content.resources = [];
   }
   
+  // Initialize researchQueries if it doesn't exist
+  if (!nodeUpdate.content?.researchQueries) {
+    nodeUpdate.content = nodeUpdate.content || {};
+    nodeUpdate.content.researchQueries = [];
+  }
+  
   // Add research results as resources
   if (chapter.research?.results && chapter.research.results.length > 0 && nodeUpdate.content) {
     const resources = nodeUpdate.content.resources as Array<{title: string; url: string; type: string}>;
@@ -413,20 +419,32 @@ export function updateCompletedChapter(
     }
   }
   
-  // Create a structured section for research queries instead of appending to mainText
-  if (chapter.research?.queries && chapter.research.queries.length > 0) {
+  // Create a structured section for research queries
+  if (chapter.research?.queries && chapter.research.queries.length > 0 && nodeUpdate.content) {
+    // Add a list of research queries
+    nodeUpdate.content.researchQueries = chapter.research.queries
+      .filter(q => q.query) // Filter out undefined queries
+      .map(q => q.query || ''); // Add fallback to empty string
+    
+    // Create a formatted queries text section
     const queriesText = chapter.research.queries
+      .filter(q => q.purpose && q.query) // Only include complete query entries
       .map(q => `${q.purpose}: ${q.query || ''}`)
       .join('\n');
     
-    // Add queries as a separate section in content
-    nodeUpdate.content = nodeUpdate.content || {};
-    nodeUpdate.content.researchQueries = chapter.research.queries.map(q => q.query);
-    
-    // Append queries to mainText in a structured way
-    if (nodeUpdate.content.mainText) {
+    // Append queries to mainText in a structured way if we have any valid queries
+    if (queriesText && nodeUpdate.content.mainText) {
       nodeUpdate.content.mainText += '\n\n## Research Queries\n' + queriesText;
     }
+  }
+  
+  // Final validation - ensure no undefined values exist
+  if (nodeUpdate.properties && nodeUpdate.properties.description === undefined) {
+    nodeUpdate.properties.description = '';
+  }
+  
+  if (nodeUpdate.content && nodeUpdate.content.mainText === undefined) {
+    nodeUpdate.content.mainText = '';
   }
   
   // Debug log to see what we're returning

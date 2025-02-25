@@ -29,10 +29,50 @@ export class DeepResearchRoadmapService {
   private researchService: ResearchService;
   private graphService: GraphService;
   private abortController: AbortController | null = null;
+  // Add local tracking of node IDs to avoid relying solely on the store
+  private generatedNodeIds: Record<string, string> = {};
+  private generatedSubtopicIds: Record<string, Record<string, string>> = {};
   
   constructor(userId: string) {
     this.researchService = new ResearchService();
     this.graphService = new GraphService(userId);
+  }
+  
+  // Utility function to sanitize data before sending to Firestore
+  // Removes any properties with undefined values that would cause Firebase to reject the update
+  private sanitizeFirestoreData<T>(obj: T): T {
+    if (!obj || typeof obj !== 'object') {
+      return obj;
+    }
+
+    const result = { ...obj } as Record<string, unknown>;
+    
+    // Recursively clean each property
+    Object.keys(result).forEach(key => {
+      const value = result[key];
+      
+      // Remove undefined values
+      if (value === undefined) {
+        delete result[key];
+      } 
+      // Recursively sanitize objects
+      else if (value && typeof value === 'object' && !Array.isArray(value)) {
+        result[key] = this.sanitizeFirestoreData(value as Record<string, unknown>);
+        
+        // If object became empty after sanitization, use empty object instead of undefined
+        if (Object.keys(result[key] as object).length === 0) {
+          result[key] = {};
+        }
+      }
+      // Sanitize arrays
+      else if (Array.isArray(value)) {
+        result[key] = value.map(item => 
+          typeof item === 'object' ? this.sanitizeFirestoreData(item) : item
+        ).filter(item => item !== undefined);
+      }
+    });
+    
+    return result as unknown as T;
   }
   
   async generateRoadmap(input: RoadmapGenerationInput): Promise<void> {
@@ -41,6 +81,10 @@ export class DeepResearchRoadmapService {
     // Reset store state
     store.reset();
     store.setIsLoading(true);
+    
+    // Reset local tracking
+    this.generatedNodeIds = {};
+    this.generatedSubtopicIds = {};
     
     // Create abort controller
     this.abortController = new AbortController();
@@ -164,11 +208,18 @@ export class DeepResearchRoadmapService {
       const { reactFlowNodes, dbNodes, dbEdges } = 
         generatePlaceholderNodesFromChapters(chapters, options);
       
-      // Store node IDs for later reference
+      // Store node IDs for later reference - both in store and locally
       for (let i = 0; i < chapters.length; i++) {
         const chapter = chapters[i];
         const nodeId = reactFlowNodes[i].id;
+        
+        // Store in Zustand store
         store.addGeneratedNodeId(chapter.title, nodeId);
+        
+        // Store locally for redundancy
+        this.generatedNodeIds[chapter.title] = nodeId;
+        
+        console.log(`Stored node ID for chapter "${chapter.title}": ${nodeId}`);
       }
       
       // 2. Save chapter nodes to database
@@ -180,15 +231,29 @@ export class DeepResearchRoadmapService {
       await Promise.all(chapterNodePromises);
       console.log(`Created ${dbNodes.length} chapter nodes and ${dbEdges.length} edges`);
       
+      // Verify our chapter node IDs are stored correctly
+      console.log('Stored chapter node IDs after creation:', JSON.stringify(this.generatedNodeIds));
+      
       // 3. Now create all subtopic nodes
       const subtopicPromises: Promise<void>[] = [];
       
       for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex++) {
         const chapter = chapters[chapterIndex];
-        const chapterNodeId = reactFlowNodes[chapterIndex].id;
+        const chapterNodeId = this.generatedNodeIds[chapter.title]; // Use local tracking
+        
+        if (!chapterNodeId) {
+          console.warn(`No node ID found for chapter ${chapter.title} in local tracking`);
+          continue;
+        }
+        
         const chapterPosition = reactFlowNodes[chapterIndex].position;
         
         if (chapter.content?.subTopics && Object.keys(chapter.content.subTopics).length > 0) {
+          // Prepare storage for subtopics for this chapter
+          if (!this.generatedSubtopicIds[chapter.title]) {
+            this.generatedSubtopicIds[chapter.title] = {};
+          }
+          
           // Generate subtopic nodes with complete data
           const { reactFlowNodes: subtopicNodes, dbNodes: subtopicDbNodes, dbEdges: subtopicDbEdges } = 
             generateSubtopicNodesForChapter(
@@ -201,12 +266,22 @@ export class DeepResearchRoadmapService {
               chapterIndex
             );
           
-          // Store subtopic node IDs
+          // Store subtopic node IDs - both in store and locally
           const subTopicNames = Object.keys(chapter.content.subTopics);
           subTopicNames.forEach((subTopicName, i) => {
             if (i < subtopicNodes.length) {
               const subtopicNodeId = subtopicNodes[i].id;
+              
+              // Store in Zustand store
               store.addGeneratedSubtopicId(chapter.title, subTopicName, subtopicNodeId);
+              
+              // Store locally for redundancy
+              if (!this.generatedSubtopicIds[chapter.title]) {
+                this.generatedSubtopicIds[chapter.title] = {};
+              }
+              this.generatedSubtopicIds[chapter.title][subTopicName] = subtopicNodeId;
+              
+              console.log(`Stored node ID for subtopic "${subTopicName}" of chapter "${chapter.title}": ${subtopicNodeId}`);
             }
           });
           
@@ -230,10 +305,19 @@ export class DeepResearchRoadmapService {
       // 4. Wait for all subtopic nodes to be created
       await Promise.all(subtopicPromises);
       
+      // Verify our subtopic node IDs are stored correctly
+      console.log('Stored subtopic node IDs after creation:', JSON.stringify(this.generatedSubtopicIds));
+      
       // 5. Now update all chapter nodes with complete content
       const chapterUpdatePromises = chapters.map(async (chapter) => {
         try {
-          const nodeId = store.generatedNodeIds[chapter.title];
+          // Try to get the node ID from our local tracking first, then fall back to the store
+          let nodeId = this.generatedNodeIds[chapter.title];
+          if (!nodeId) {
+            nodeId = store.generatedNodeIds[chapter.title];
+            console.log(`Retrieved node ID from store for chapter "${chapter.title}": ${nodeId}`);
+          }
+          
           if (!nodeId) {
             console.warn(`No node ID found for chapter ${chapter.title}`);
             return;
@@ -241,7 +325,17 @@ export class DeepResearchRoadmapService {
           
           // Update the chapter node with complete content
           const chapterUpdate = updateCompletedChapter(chapter);
-          await this.graphService.updateNode(options.graphId, nodeId, chapterUpdate);
+          
+          // Sanitize update data to remove any undefined values
+          const sanitizedUpdate = this.sanitizeFirestoreData(chapterUpdate);
+          console.log(`Sanitized update for chapter "${chapter.title}"`, 
+            JSON.stringify({
+              beforeKeys: Object.keys(chapterUpdate),
+              afterKeys: Object.keys(sanitizedUpdate)
+            })
+          );
+          
+          await this.graphService.updateNode(options.graphId, nodeId, sanitizedUpdate);
           console.log(`Updated chapter node ${nodeId} for ${chapter.title} with complete content`);
         } catch (error) {
           console.error(`Error updating chapter node for ${chapter.title}:`, error);
@@ -261,7 +355,13 @@ export class DeepResearchRoadmapService {
         for (const subTopicName of subTopicNames) {
           const subtopicPromise = async () => {
             try {
-              const subtopicNodeId = store.generatedSubtopicIds[chapter.title]?.[subTopicName];
+              // Try to get the subtopic node ID from our local tracking first, then fall back to the store
+              let subtopicNodeId = this.generatedSubtopicIds[chapter.title]?.[subTopicName];
+              if (!subtopicNodeId) {
+                subtopicNodeId = store.generatedSubtopicIds[chapter.title]?.[subTopicName];
+                console.log(`Retrieved node ID from store for subtopic "${subTopicName}" of chapter "${chapter.title}": ${subtopicNodeId}`);
+              }
+              
               if (!subtopicNodeId) {
                 console.warn(`No node ID found for subtopic ${subTopicName} of chapter ${chapter.title}`);
                 return;
@@ -288,7 +388,7 @@ export class DeepResearchRoadmapService {
                 content: {
                   mainText: subTopic.content || '',
                   resources: [] as Array<{title: string; url: string; type: string}>,
-                  researchQueries: subtopicQueries.map(q => q.query)
+                  researchQueries: subtopicQueries.filter(q => q.query).map(q => q.query || '')
                 },
                 metadata: {
                   status: 'active' as NodeStatus,
@@ -325,15 +425,21 @@ export class DeepResearchRoadmapService {
               // Add research queries in a structured format
               if (subtopicQueries.length > 0) {
                 const queriesText = subtopicQueries
+                  .filter(q => q.purpose && q.query)
                   .map(q => `${q.purpose}: ${q.query || ''}`)
                   .join('\n');
                 
                 // Append queries to mainText in a structured way
-                subtopicUpdate.content.mainText += '\n\n## Research Queries\n' + queriesText;
+                if (queriesText && subtopicUpdate.content.mainText) {
+                  subtopicUpdate.content.mainText += '\n\n## Research Queries\n' + queriesText;
+                }
               }
               
+              // Sanitize update data to remove any undefined values
+              const sanitizedUpdate = this.sanitizeFirestoreData(subtopicUpdate);
+              
               // Update the subtopic node
-              await this.graphService.updateNode(options.graphId, subtopicNodeId, subtopicUpdate);
+              await this.graphService.updateNode(options.graphId, subtopicNodeId, sanitizedUpdate);
               console.log(`Updated subtopic node ${subtopicNodeId} for ${subTopicName} with complete content`);
             } catch (error) {
               console.error(`Error updating subtopic node for ${subTopicName}:`, error);
