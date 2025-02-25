@@ -13,7 +13,6 @@ import {
 } from '../utils/node-generation-utils';
 import { useDeepResearchRoadmapStore } from '../stores/deep-research-roadmap-store';
 import { NodeStatus } from '@/shared/types/node';
-import { SubTopic } from '../types/research';
 
 export interface RoadmapGenerationInput {
   rootNodeId: string;
@@ -53,8 +52,7 @@ export class DeepResearchRoadmapService {
         numberOfChapters: input.numberOfChapters
       };
       
-      let lastState: ResearchState | null = null;
-      let nodesCreated = false;
+      let finalResearchState: ResearchState | null = null;
       
       // Options for node generation
       const nodeOptions: NodeGenerationOptions = {
@@ -65,7 +63,7 @@ export class DeepResearchRoadmapService {
         graphPosition: input.graphPosition
       };
       
-      // Process research events
+      // Process research events but don't create nodes yet
       for await (const event of this.researchService.startResearch(request)) {
         // Check if canceled
         if (store.cancelRequested) {
@@ -106,35 +104,29 @@ export class DeepResearchRoadmapService {
             }
           };
           
-          lastState = inferredState;
+          // Update the state in the store
+          finalResearchState = inferredState;
           store.setResearchState(inferredState);
           
           // Calculate and update progress
           const progress = this.calculateProgress(inferredState);
           store.setProgress(progress);
           store.setCurrentPhaseLabel(this.getPhaseLabel(inferredState));
-          
-          // Handle different research phases
-          if (inferredState.currentPhase === RESEARCH_PHASES.PLANNING && !nodesCreated) {
-            // Create placeholder nodes for planned chapters
-            await this.createPlaceholderNodes(inferredState, nodeOptions);
-            nodesCreated = true;
-          } else if (inferredState.currentPhase === RESEARCH_PHASES.CHAPTER_WRITING && inferredState.currentChapterTitle) {
-            // Update chapter nodes and create subtopic nodes
-            await this.updateChapterAndCreateSubtopics(inferredState, nodeOptions);
-          }
         }
         
-        // Handle final output
-        if (event.isFinalOutput) {
+        // Handle final output - this is where we'll create all nodes once research is complete
+        if (event.isFinalOutput && finalResearchState) {
           store.setProgress(100);
           store.setCurrentPhaseLabel('Research Complete');
+          
+          // Now that research is complete, create all the nodes at once
+          await this.createAllNodesWithCompleteData(finalResearchState, nodeOptions);
           break;
         }
       }
       
       // Make sure final phase is marked as complete
-      if (lastState && lastState.currentPhase === RESEARCH_PHASES.COMPLETE) {
+      if (finalResearchState && finalResearchState.currentPhase === RESEARCH_PHASES.COMPLETE) {
         store.setProgress(100);
         store.setCurrentPhaseLabel('Research Complete');
       }
@@ -158,235 +150,206 @@ export class DeepResearchRoadmapService {
     }
   }
   
-  private async createPlaceholderNodes(
+  // New method to create all nodes with complete data at once
+  private async createAllNodesWithCompleteData(
     state: ResearchState,
     options: NodeGenerationOptions
   ): Promise<void> {
     const store = useDeepResearchRoadmapStore.getState();
+    console.log('Creating all nodes with complete data...');
     
-    // Generate placeholder nodes for planned chapters
-    const chapters = Object.values(state.chapters);
-    const { reactFlowNodes, dbNodes, dbEdges } = 
-      generatePlaceholderNodesFromChapters(chapters, options);
-    
-    // Save generated node IDs in store
-    for (let i = 0; i < chapters.length; i++) {
-      const chapter = chapters[i];
-      const nodeId = reactFlowNodes[i].id;
-      store.addGeneratedNodeId(chapter.title, nodeId);
-    }
-    
-    // Create subtopic nodes for each chapter right after creating chapter nodes
-    // This is a critical change - we're creating ALL subtopic nodes immediately
-    const subtopicPromises = chapters.map(async (chapter, index) => {
-      try {
-        // Get the node ID for this chapter
-        const chapterNodeId = reactFlowNodes[index].id;
-        const chapterPosition = reactFlowNodes[index].position;
+    try {
+      // 1. First create all chapter nodes
+      const chapters = Object.values(state.chapters);
+      const { reactFlowNodes, dbNodes, dbEdges } = 
+        generatePlaceholderNodesFromChapters(chapters, options);
+      
+      // Store node IDs for later reference
+      for (let i = 0; i < chapters.length; i++) {
+        const chapter = chapters[i];
+        const nodeId = reactFlowNodes[i].id;
+        store.addGeneratedNodeId(chapter.title, nodeId);
+      }
+      
+      // 2. Save chapter nodes to database
+      const chapterNodePromises = [
+        ...dbNodes.map(node => this.graphService.createNode(options.graphId, node)),
+        ...dbEdges.map(edge => this.graphService.createEdge(options.graphId, edge))
+      ];
+      
+      await Promise.all(chapterNodePromises);
+      console.log(`Created ${dbNodes.length} chapter nodes and ${dbEdges.length} edges`);
+      
+      // 3. Now create all subtopic nodes
+      const subtopicPromises: Promise<void>[] = [];
+      
+      for (let chapterIndex = 0; chapterIndex < chapters.length; chapterIndex++) {
+        const chapter = chapters[chapterIndex];
+        const chapterNodeId = reactFlowNodes[chapterIndex].id;
+        const chapterPosition = reactFlowNodes[chapterIndex].position;
         
-        // Create placeholder subtopic nodes based on the chapter's subtopic names
-        if (chapter.subTopicNames && chapter.subTopicNames.length > 0) {
-          // Create a placeholder chapter with subtopics
-          const placeholderSubTopics: Record<string, SubTopic> = {};
-          
-          // Create placeholder content for each subtopic
-          chapter.subTopicNames.forEach(name => {
-            placeholderSubTopics[name] = {
-              title: name,
-              description: `Subtopic of ${chapter.title}`,
-              content: '',
-              sources: []
-            };
-          });
-          
-          // Create a placeholder chapter with content for the subtopics
-          const placeholderChapter = {
-            ...chapter,
-            content: {
-              overview: chapter.description || '',
-              subTopics: placeholderSubTopics
-            }
-          };
-          
-          // Generate subtopic nodes
+        if (chapter.content?.subTopics && Object.keys(chapter.content.subTopics).length > 0) {
+          // Generate subtopic nodes with complete data
           const { reactFlowNodes: subtopicNodes, dbNodes: subtopicDbNodes, dbEdges: subtopicDbEdges } = 
             generateSubtopicNodesForChapter(
-              placeholderChapter,
+              chapter,
               chapterNodeId,
               chapterPosition,
               options.graphId,
               options.graphName,
               options.graphPosition,
-              index
+              chapterIndex
             );
           
-          // Save subtopic node IDs in store
-          chapter.subTopicNames.forEach((subTopicName, i) => {
+          // Store subtopic node IDs
+          const subTopicNames = Object.keys(chapter.content.subTopics);
+          subTopicNames.forEach((subTopicName, i) => {
             if (i < subtopicNodes.length) {
               const subtopicNodeId = subtopicNodes[i].id;
               store.addGeneratedSubtopicId(chapter.title, subTopicName, subtopicNodeId);
             }
           });
           
-          // Save to database
-          await Promise.all([
-            ...subtopicDbNodes.map(node => this.graphService.createNode(options.graphId, node)),
-            ...subtopicDbEdges.map(edge => this.graphService.createEdge(options.graphId, edge))
-          ]);
-        }
-      } catch (error) {
-        console.error(`Error creating subtopic nodes for chapter ${chapter.title}:`, error);
-      }
-    });
-    
-    // Save chapter nodes to database
-    try {
-      await Promise.all([
-        ...dbNodes.map(node => this.graphService.createNode(options.graphId, node)),
-        ...dbEdges.map(edge => this.graphService.createEdge(options.graphId, edge))
-      ]);
-      
-      // After chapter nodes are saved, create all subtopic nodes
-      await Promise.all(subtopicPromises);
-      
-    } catch (error) {
-      console.error('Error saving placeholder nodes:', error);
-      store.setError('Failed to save placeholder nodes');
-    }
-  }
-  
-  private async updateChapterAndCreateSubtopics(
-    state: ResearchState,
-    options: NodeGenerationOptions
-  ): Promise<void> {
-    const store = useDeepResearchRoadmapStore.getState();
-    
-    // Find current chapter
-    const currentChapterTitle = state.currentChapterTitle;
-    if (!currentChapterTitle) return;
-    
-    const chapter = state.chapters[currentChapterTitle];
-    if (!chapter || !chapter.content) return;
-    
-    // Get node ID for this chapter
-    const nodeId = store.generatedNodeIds[currentChapterTitle];
-    if (!nodeId) return;
-    
-    // Debug log to see what we're working with
-    console.log('Updating chapter:', currentChapterTitle);
-    console.log('Chapter data:', JSON.stringify({
-      title: chapter.title,
-      status: chapter.status,
-      hasContent: !!chapter.content,
-      contentKeys: chapter.content ? Object.keys(chapter.content) : [],
-      hasResearch: !!chapter.research,
-      resultsCount: chapter.research?.results?.length || 0,
-      queriesCount: chapter.research?.queries?.length || 0,
-      subTopicCount: chapter.content?.subTopics ? Object.keys(chapter.content.subTopics).length : 0
-    }));
-    
-    // Update chapter node with completed content
-    const chapterUpdate = updateCompletedChapter(chapter);
-    
-    // Debug log to check what data the system is actually reading
-    console.log(`Checking node fields in updateChapterAndCreateSubtopics:`, {
-      nodeId,
-      fieldsInContent: Object.keys(chapterUpdate.content || {}),
-      chapterTitle: chapter.title,
-      hasResourcesArray: Array.isArray(chapterUpdate.content?.resources),
-      resourcesCount: (chapterUpdate.content?.resources as { title: string; url: string; type: string }[] || []).length
-    });
-    
-    try {
-      // Update chapter node with completed content
-      await this.graphService.updateNode(options.graphId, nodeId, chapterUpdate);
-      console.log(`Updated chapter node ${nodeId} for ${currentChapterTitle}`);
-      
-      // Update subtopic nodes with real content, don't create new ones
-      if (chapter.content.subTopics) {
-        const subTopicNames = Object.keys(chapter.content.subTopics);
-        console.log(`Found ${subTopicNames.length} subtopics to update`);
-        
-        // Update each subtopic node with the completed content
-        for (const subTopicName of subTopicNames) {
-          // Get the subtopic node ID from the store
-          const subtopicNodeId = store.generatedSubtopicIds[currentChapterTitle]?.[subTopicName];
-          if (!subtopicNodeId) {
-            console.warn(`No node ID found for subtopic ${subTopicName} of chapter ${currentChapterTitle}`);
-            continue;
-          }
-          
-          const subTopic = chapter.content.subTopics[subTopicName];
-          console.log(`Updating subtopic: ${subTopicName}`, JSON.stringify({
-            title: subTopic.title,
-            description: subTopic.description?.substring(0, 50) || '(no description)',
-            contentLength: subTopic.content?.length || 0,
-            sourcesCount: subTopic.sources?.length || 0
-          }));
-          
-          // Find any research results specifically for this subtopic
-          const subtopicResults = chapter.research?.results?.filter(
-            result => result.targetSubTopic === subTopicName
-          ) || [];
-          
-          // Find any research queries specifically for this subtopic
-          const subtopicQueries = chapter.research?.queries?.filter(
-            query => query.targetSubTopic === subTopicName
-          ).map(q => q.query) || [];
-          
-          console.log(`Found ${subtopicResults.length} results and ${subtopicQueries.length} queries for subtopic ${subTopicName}`);
-          
-          // Prepare the main text content with queries included
-          let mainTextContent = subTopic.content || '';
-          if (subtopicQueries.length > 0) {
-            const queriesText = subtopicQueries.join('\n');
-            mainTextContent = `${mainTextContent}\n\nResearch Queries:\n${queriesText}`;
-          }
-          
-          // Create the update for the subtopic node
-          const subtopicUpdate = {
-            properties: {
-              title: subTopic.title,
-              description: subTopic.description || '',
-              type: 'concept'
-            },
-            content: {
-              mainText: mainTextContent,
-              resources: [
-                // Include subtopic-specific sources
-                ...(subTopic.sources?.map(src => ({
-                  title: src.title,
-                  url: src.url,
-                  type: 'link'
-                })) || []),
-                // Include subtopic-specific research results
-                ...subtopicResults.map(result => ({
-                  title: result.title,
-                  url: result.url,
-                  type: 'link'
-                }))
-              ],
-              // Store research queries directly in the content
-              researchQueries: subtopicQueries
-            },
-            metadata: {
-              status: 'active' as NodeStatus,
-              tags: []
+          // Create a promise to save subtopic nodes and edges
+          const subtopicPromise = async () => {
+            try {
+              await Promise.all([
+                ...subtopicDbNodes.map(node => this.graphService.createNode(options.graphId, node)),
+                ...subtopicDbEdges.map(edge => this.graphService.createEdge(options.graphId, edge))
+              ]);
+              console.log(`Created ${subtopicDbNodes.length} subtopic nodes for chapter "${chapter.title}"`);
+            } catch (error) {
+              console.error(`Error creating subtopic nodes for chapter "${chapter.title}":`, error);
             }
           };
           
-          // Log the update we're about to make
-          console.log(`Updating subtopic node ${subtopicNodeId} with data length: ${
-            JSON.stringify(subtopicUpdate).length
-          } characters`);
-          
-          // Update the subtopic node in the database
-          await this.graphService.updateNode(options.graphId, subtopicNodeId, subtopicUpdate);
-          console.log(`Successfully updated subtopic node ${subtopicNodeId} for ${subTopicName}`);
+          subtopicPromises.push(subtopicPromise());
         }
       }
+      
+      // 4. Wait for all subtopic nodes to be created
+      await Promise.all(subtopicPromises);
+      
+      // 5. Now update all chapter nodes with complete content
+      const chapterUpdatePromises = chapters.map(async (chapter) => {
+        try {
+          const nodeId = store.generatedNodeIds[chapter.title];
+          if (!nodeId) {
+            console.warn(`No node ID found for chapter ${chapter.title}`);
+            return;
+          }
+          
+          // Update the chapter node with complete content
+          const chapterUpdate = updateCompletedChapter(chapter);
+          await this.graphService.updateNode(options.graphId, nodeId, chapterUpdate);
+          console.log(`Updated chapter node ${nodeId} for ${chapter.title} with complete content`);
+        } catch (error) {
+          console.error(`Error updating chapter node for ${chapter.title}:`, error);
+        }
+      });
+      
+      await Promise.all(chapterUpdatePromises);
+      console.log('All chapter nodes updated with complete content');
+      
+      // 6. Finally, update all subtopic nodes with complete content
+      const subtopicUpdatePromises: Promise<void>[] = [];
+      
+      for (const chapter of chapters) {
+        if (!chapter.content?.subTopics) continue;
+        
+        const subTopicNames = Object.keys(chapter.content.subTopics);
+        for (const subTopicName of subTopicNames) {
+          const subtopicPromise = async () => {
+            try {
+              const subtopicNodeId = store.generatedSubtopicIds[chapter.title]?.[subTopicName];
+              if (!subtopicNodeId) {
+                console.warn(`No node ID found for subtopic ${subTopicName} of chapter ${chapter.title}`);
+                return;
+              }
+              
+              const subTopic = chapter.content!.subTopics[subTopicName];
+              
+              // Find results and queries for this subtopic
+              const subtopicResults = chapter.research?.results?.filter(
+                result => result.targetSubTopic === subTopicName
+              ) || [];
+              
+              const subtopicQueries = chapter.research?.queries?.filter(
+                query => query.targetSubTopic === subTopicName
+              ) || [];
+              
+              // Create the update for the subtopic node
+              const subtopicUpdate = {
+                properties: {
+                  title: subTopic.title,
+                  description: subTopic.description || '',
+                  type: 'concept'
+                },
+                content: {
+                  mainText: subTopic.content || '',
+                  resources: [] as Array<{title: string; url: string; type: string}>,
+                  researchQueries: subtopicQueries.map(q => q.query)
+                },
+                metadata: {
+                  status: 'active' as NodeStatus,
+                  tags: []
+                }
+              };
+              
+              // Add sources as resources
+              if (subTopic.sources && subTopic.sources.length > 0) {
+                for (const src of subTopic.sources) {
+                  if (src.title && src.url) {
+                    subtopicUpdate.content.resources.push({
+                      title: src.title,
+                      url: src.url,
+                      type: 'link'
+                    });
+                  }
+                }
+              }
+              
+              // Add research results as resources
+              if (subtopicResults.length > 0) {
+                for (const result of subtopicResults) {
+                  if (result.title && result.url) {
+                    subtopicUpdate.content.resources.push({
+                      title: result.title,
+                      url: result.url,
+                      type: 'link'
+                    });
+                  }
+                }
+              }
+              
+              // Add research queries in a structured format
+              if (subtopicQueries.length > 0) {
+                const queriesText = subtopicQueries
+                  .map(q => `${q.purpose}: ${q.query || ''}`)
+                  .join('\n');
+                
+                // Append queries to mainText in a structured way
+                subtopicUpdate.content.mainText += '\n\n## Research Queries\n' + queriesText;
+              }
+              
+              // Update the subtopic node
+              await this.graphService.updateNode(options.graphId, subtopicNodeId, subtopicUpdate);
+              console.log(`Updated subtopic node ${subtopicNodeId} for ${subTopicName} with complete content`);
+            } catch (error) {
+              console.error(`Error updating subtopic node for ${subTopicName}:`, error);
+            }
+          };
+          
+          subtopicUpdatePromises.push(subtopicPromise());
+        }
+      }
+      
+      await Promise.all(subtopicUpdatePromises);
+      console.log('All subtopic nodes updated with complete content');
+      
     } catch (error) {
-      console.error('Error updating chapter or subtopic content:', error);
+      console.error('Error creating nodes with complete data:', error);
+      store.setError('Failed to create nodes with complete data');
     }
   }
   
