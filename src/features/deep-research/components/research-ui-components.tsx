@@ -1,6 +1,6 @@
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Button } from '@/shared/components/ui/button';
 import { Input } from '@/shared/components/ui/input';
 import { Card } from '@/shared/components/ui/card';
@@ -9,6 +9,7 @@ import { Badge } from '@/shared/components/ui/badge';
 import { RESEARCH_PHASES } from '../types/research';
 import type { Chapter, SubTopic, ResearchPhase } from '../types/research';
 import type { ChapterContent } from '../types/research';
+import type { ResearchState } from '../types/research';
 
 interface SearchResult {
   title: string;
@@ -455,38 +456,85 @@ export const ResearchForm: React.FC<ResearchFormProps> = ({
   </Card>
 );
 
+// Research state debugger component
+export interface ResearchStateDebuggerProps {
+  researchState: ResearchState | undefined;
+}
+
+export const ResearchStateDebugger: React.FC<ResearchStateDebuggerProps> = ({
+  researchState
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  if (!researchState) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 rounded-md border bg-gray-50">
+      <div 
+        className="flex items-center justify-between p-3 cursor-pointer bg-gray-100 hover:bg-gray-200 transition-colors"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <h3 className="text-sm font-medium">Research State Debug View</h3>
+        <div className="text-gray-500">
+          {isExpanded ? (
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          )}
+        </div>
+      </div>
+      
+      {isExpanded && (
+        <ScrollArea className="h-[300px]">
+          <div className="p-3 font-mono text-xs whitespace-pre-wrap overflow-x-auto">
+            {JSON.stringify(researchState, null, 2)}
+          </div>
+        </ScrollArea>
+      )}
+    </div>
+  );
+};
+
 // Research results display component
 export interface ResearchResultsProps {
   groupedChapters: Record<ResearchPhase, Chapter[]>;
   isLoading: boolean;
+  researchState?: ResearchState;
 }
 
 export const ResearchResults: React.FC<ResearchResultsProps> = ({
   groupedChapters,
-  isLoading
+  isLoading,
+  researchState
 }) => (
-  <ScrollArea className="h-[600px] rounded-md border bg-gray-50">
-    {Object.entries(groupedChapters).length > 0 ? (
-      Object.entries(groupedChapters).map(([phase, chapters]) => (
-        <div key={phase} className="mb-8">
-          <PhaseHeader 
-            phase={phase as ResearchPhase} 
-            chapters={chapters}
-          />
-          <div className="bg-white rounded-b-lg">
-            {chapters.map((chapter, index) => (
-              <ResearchChapter 
-                key={`${phase}-${index}`}
-                chapter={chapter}
-              />
-            ))}
+  <div className="space-y-4">
+    <ScrollArea className="h-[600px] rounded-md border bg-gray-50">
+      {Object.entries(groupedChapters).length > 0 ? (
+        Object.entries(groupedChapters).map(([phase, chapters]) => (
+          <div key={phase} className="mb-8">
+            <PhaseHeader 
+              phase={phase as ResearchPhase} 
+              chapters={chapters}
+            />
+            <div className="bg-white rounded-b-lg">
+              {chapters.map((chapter, index) => (
+                <ResearchChapter 
+                  key={`${phase}-${index}`}
+                  chapter={chapter}
+                />
+              ))}
+            </div>
           </div>
-        </div>
-      ))
-    ) : isLoading ? (
-      <LoadingIndicator />
-    ) : (
-      <EmptyState />
-    )}
-  </ScrollArea>
+        ))
+      ) : isLoading ? (
+        <LoadingIndicator />
+      ) : (
+        <EmptyState />
+      )}
+    </ScrollArea>
+    
+    <ResearchStateDebugger researchState={researchState} />
+  </div>
 ); 

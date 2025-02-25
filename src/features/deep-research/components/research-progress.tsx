@@ -84,6 +84,7 @@ export function ResearchProgress() {
       <ResearchResults 
         groupedChapters={groupedChapters}
         isLoading={isLoading}
+        researchState={session?.state}
       />
     </div>
   );
