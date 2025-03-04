@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useNodeSelectionStore } from '../stores/node-selection-store';
 import { GraphService } from '@/shared/services/firebase/graph-service';
-import { useReactFlow } from '@xyflow/react';
+import { useReactFlow, Position } from '@xyflow/react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -14,6 +14,13 @@ import {
 } from '@/shared/components/ui/dialog';
 import { Button } from '@/shared/components/ui/button';
 import { Label } from '@/shared/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 
 // Predefined color options for node backgrounds - matching NodeInfoDialog
 const COLORS = [
@@ -27,6 +34,23 @@ const COLORS = [
   { value: '#fffbeb', label: 'Light Yellow' },
 ];
 
+// Define a mapping between string position values and Position enum values
+const positionMap = {
+  'top': Position.Top,
+  'right': Position.Right,
+  'bottom': Position.Bottom,
+  'left': Position.Left
+} as const;
+
+type NodeHandlePosition = 'top' | 'right' | 'bottom' | 'left' | null;
+
+const POSITION_OPTIONS: { value: NodeHandlePosition; label: string }[] = [
+  { value: 'top', label: 'Top' },
+  { value: 'right', label: 'Right' },
+  { value: 'bottom', label: 'Bottom' },
+  { value: 'left', label: 'Left' },
+];
+
 interface MultiNodeColorMenuProps {
   userId: string;
   isOpen: boolean;
@@ -36,10 +60,12 @@ interface MultiNodeColorMenuProps {
 export const MultiNodeColorMenu = ({ userId, isOpen, onClose }: MultiNodeColorMenuProps) => {
   const { selectedNodes, clearSelectedNodes } = useNodeSelectionStore();
   const [selectedColor, setSelectedColor] = useState<string>(COLORS[0].value);
+  const [sourcePosition, setSourcePosition] = useState<NodeHandlePosition>('bottom');
+  const [targetPosition, setTargetPosition] = useState<NodeHandlePosition>('top');
   const reactFlowInstance = useReactFlow();
   const graphService = new GraphService(userId);
   
-  const handleColorChange = async () => {
+  const handleApplyChanges = async () => {
     if (selectedNodes.length === 0) {
       toast.error('No nodes selected');
       onClose();
@@ -47,7 +73,7 @@ export const MultiNodeColorMenu = ({ userId, isOpen, onClose }: MultiNodeColorMe
     }
 
     try {
-      toast.loading('Updating node colors...');
+      toast.loading('Updating nodes...', { id: 'update-nodes' });
       
       // Group nodes by graph ID for batch updates
       const nodesByGraph: Record<string, string[]> = {};
@@ -64,16 +90,25 @@ export const MultiNodeColorMenu = ({ userId, isOpen, onClose }: MultiNodeColorMe
       // Update nodes in Firestore
       const updatePromises = Object.entries(nodesByGraph).flatMap(([graphId, nodeIds]) => {
         return nodeIds.map(nodeId => {
-          // First get the current node to preserve existing metadata
+          // First get the current node to preserve existing data
           return graphService.getNode(graphId, nodeId).then(node => {
             if (node) {
+              // Update metadata for background color
               const updatedMetadata = {
                 ...node.metadata,
                 backgroundColor: selectedColor
               };
               
+              // Update properties for source and target positions
+              const updatedProperties = {
+                ...node.properties,
+                sourcePosition,
+                targetPosition
+              };
+              
               return graphService.updateNode(graphId, nodeId, {
-                metadata: updatedMetadata
+                metadata: updatedMetadata,
+                properties: updatedProperties
               });
             }
             return Promise.resolve();
@@ -86,8 +121,13 @@ export const MultiNodeColorMenu = ({ userId, isOpen, onClose }: MultiNodeColorMe
       // Update nodes in ReactFlow
       const updatedNodes = reactFlowInstance.getNodes().map(node => {
         if (selectedNodes.some(selectedNode => selectedNode.id === node.id)) {
-          // Make sure we have a metadata object
+          // Update node data
           const metadata = node.data.metadata || {};
+          const properties = node.data.properties || {};
+          
+          // Map string position to Position enum values for ReactFlow
+          const mappedSourcePosition = sourcePosition ? positionMap[sourcePosition] : undefined;
+          const mappedTargetPosition = targetPosition ? positionMap[targetPosition] : undefined;
           
           return {
             ...node,
@@ -96,8 +136,15 @@ export const MultiNodeColorMenu = ({ userId, isOpen, onClose }: MultiNodeColorMe
               metadata: {
                 ...metadata,
                 backgroundColor: selectedColor
+              },
+              properties: {
+                ...properties,
+                sourcePosition,
+                targetPosition
               }
-            }
+            },
+            sourcePosition: mappedSourcePosition,
+            targetPosition: mappedTargetPosition
           };
         }
         return node;
@@ -105,14 +152,14 @@ export const MultiNodeColorMenu = ({ userId, isOpen, onClose }: MultiNodeColorMe
       
       reactFlowInstance.setNodes(updatedNodes);
       
-      toast.dismiss();
-      toast.success('Node colors updated successfully');
+      toast.dismiss('update-nodes');
+      toast.success('Nodes updated successfully');
       clearSelectedNodes();
       onClose();
     } catch (error) {
-      toast.dismiss();
-      toast.error('Failed to update node colors');
-      console.error('Error updating node colors:', error);
+      toast.dismiss('update-nodes');
+      toast.error('Failed to update nodes');
+      console.error('Error updating nodes:', error);
     }
   };
 
@@ -120,11 +167,12 @@ export const MultiNodeColorMenu = ({ userId, isOpen, onClose }: MultiNodeColorMe
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Change Color for {selectedNodes.length} Selected Nodes</DialogTitle>
+          <DialogTitle>Edit {selectedNodes.length} Selected Nodes</DialogTitle>
         </DialogHeader>
         <div className="grid gap-4 py-4">
+          {/* Color Selection */}
           <div className="grid gap-2">
-            <Label htmlFor="color">Select Color</Label>
+            <Label htmlFor="color">Node Color</Label>
             <div className="flex flex-wrap gap-2">
               {COLORS.map((color) => (
                 <button
@@ -141,13 +189,53 @@ export const MultiNodeColorMenu = ({ userId, isOpen, onClose }: MultiNodeColorMe
               ))}
             </div>
           </div>
+          
+          {/* Source Position Selection */}
+          <div className="grid gap-2">
+            <Label htmlFor="sourcePosition">Source Position</Label>
+            <Select
+              value={sourcePosition ?? 'bottom'}
+              onValueChange={(value) => setSourcePosition(value as NodeHandlePosition)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select source position" />
+              </SelectTrigger>
+              <SelectContent>
+                {POSITION_OPTIONS.map((option) => (
+                  <SelectItem key={option.label} value={option.value ?? ''}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
+          {/* Target Position Selection */}
+          <div className="grid gap-2">
+            <Label htmlFor="targetPosition">Target Position</Label>
+            <Select
+              value={targetPosition ?? 'top'}
+              onValueChange={(value) => setTargetPosition(value as NodeHandlePosition)}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select target position" />
+              </SelectTrigger>
+              <SelectContent>
+                {POSITION_OPTIONS.map((option) => (
+                  <SelectItem key={option.label} value={option.value ?? ''}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" onClick={handleColorChange}>
-            Apply Color
+          <Button type="button" onClick={handleApplyChanges}>
+            Apply Changes
           </Button>
         </DialogFooter>
       </DialogContent>

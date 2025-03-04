@@ -125,7 +125,7 @@ const RootNodeTitle = ({ graphs, nodes }: RootNodeTitleProps) => {
 };
 
 const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
-  const { graphs, isLoading, error, refresh } = useGraphWorkspace(userId);
+  const { graphs, isLoading, error } = useGraphWorkspace(userId);
   const graphService = useMemo(() => new GraphService(userId), [userId]);
   const { selectedTemplateId, clearSelection, isPlacementMode } = useTemplateSelectionStore();
   const { isCreationMode: isRootNodeCreationMode, setCreationMode: setRootNodeCreationMode } = useRootNodeCreationStore();
@@ -217,18 +217,17 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
     }
   }, [isMultiEditMode, selectedNodes.length]);
 
-  // Update nodes and edges when graphs change
+  // Effect to transform graphs to ReactFlow format when they change
   useEffect(() => {
-    if (graphs.length > 0) {
-      const { nodes: newNodes, edges: newEdges } = transformGraphsToReactFlow(graphs);
-      setNodes(newNodes);
-      setEdges(newEdges);
-    } else {
-      // Clear nodes and edges when there are no graphs
-      setNodes([]);
-      setEdges([]);
-    }
-  }, [graphs, setNodes, setEdges]);
+    if (!graphs.length || isAnimating) return;
+
+    console.log('Transforming graphs to ReactFlow format after update');
+    const { nodes: flowNodes, edges: flowEdges } = transformGraphsToReactFlow(graphs);
+    
+    // Update ReactFlow state with the transformed data
+    setNodes(flowNodes);
+    setEdges(flowEdges);
+  }, [graphs, setNodes, setEdges, isAnimating]);
 
   const onNodeClick = useCallback((event: React.MouseEvent<Element, MouseEvent>, node: Node<FlowNodeData>) => {
     // Close menu if clicking a different node
@@ -275,6 +274,9 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
     }
 
     try {
+      // Show a loading indicator
+      toast.loading('Creating edge...', { id: 'edge-creation' });
+      
       const newEdge = {
         edgeId: crypto.randomUUID(),
         fromNodeId: selectedFirstNodeId,
@@ -284,14 +286,16 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
       } as unknown as DbEdge; // Cast to DbEdge since we can't create a unique symbol
 
       await graphService.createEdge(selectedEdgeGraphId, newEdge);
-      await refresh();
+      
+      // The real-time listener will update the state, so we don't need to call refresh() here
+      toast.success('Edge created successfully', { id: 'edge-creation' });
       resetEdgeCreation();
     } catch (error) {
       console.error('Failed to create edge:', error);
-      alert('Failed to create edge. Please try again.');
+      toast.error('Failed to create edge', { id: 'edge-creation' });
       resetEdgeCreation();
     }
-  }, [selectedFirstNodeId, selectedEdgeGraphId, graphService, refresh, resetEdgeCreation]);
+  }, [selectedFirstNodeId, selectedEdgeGraphId, graphService, resetEdgeCreation]);
 
   const onNodeDragStop: OnNodeDrag = useCallback(async (event, node) => {
     const graph = graphs.find(g => g.graphId === node.data.graphId);
@@ -390,32 +394,36 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
         return;
       }
 
-      const newNodeId = crypto.randomUUID();
-      const relativePosition = calculateRelativePosition(position, parentGraph.graphPosition);
-      const newNode = createNewNode(newNodeId, relativePosition);
+      setIsPlacing(true);
+      toast.loading('Creating new node...', { id: 'node-creation' });
+      
+      try {
+        const newNodeId = crypto.randomUUID();
+        const relativePosition = calculateRelativePosition(position, parentGraph.graphPosition);
+        const newNode = createNewNode(newNodeId, relativePosition);
 
-      const result = await handleAsyncOperation(
-        async () => {
-          await graphService.createNode(selectedParentGraphId, newNode);
-          await refresh();
+        await graphService.createNode(selectedParentGraphId, newNode);
+        
+        // The real-time listener will handle the UI update
+        toast.success('Node created successfully', { id: 'node-creation' });
+        
+        // Wait a bit to ensure the listener has fired and the node is in the state
+        setTimeout(() => {
+          const createdNode = nodes.find(n => n.id === newNodeId);
+          if (createdNode) {
+            setSelectedNode(createdNode);
+            setIsInfoDialogOpen(true);
+          }
           resetNodeCreation();
-          return newNodeId;
-        },
-        {
-          loadingMessage: 'Creating new node...',
-          successMessage: 'Node created successfully',
-          errorMessage: 'Failed to create new node',
-          toastId: 'node-creation'
-        }
-      );
-
-      if (result) {
-        const createdNode = nodes.find(n => n.id === result);
-        if (createdNode) {
-          setSelectedNode(createdNode);
-          setIsInfoDialogOpen(true);
-        }
+          setIsPlacing(false);
+        }, 500);
+      } catch (error) {
+        console.error('Failed to create new node:', error);
+        toast.error('Failed to create new node', { id: 'node-creation' });
+        resetNodeCreation();
+        setIsPlacing(false);
       }
+      
       return;
     }
 
@@ -428,26 +436,28 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
         return;
       }
 
-      clearSelection();
-      const templateService = new TemplateService('texas_TEKS', 'Math');
+      setIsPlacing(true);
+      toast.loading('Creating graph from template...', { id: 'template-placement' });
       
-      await handleAsyncOperation(
-        async () => {
-          await templateService.copyTemplateToUserGraph({
-            templateId: selectedTemplateId,
-            userId: currentUser.uid,
-            newGraphId: crypto.randomUUID(),
-            graphPosition: position,
-          });
-          await refresh();
-        },
-        {
-          loadingMessage: 'Creating graph from template...',
-          successMessage: 'Template placed successfully',
-          errorMessage: 'Failed to place template',
-          toastId: 'template-placement'
-        }
-      );
+      try {
+        clearSelection();
+        const templateService = new TemplateService('texas_TEKS', 'Math');
+        
+        await templateService.copyTemplateToUserGraph({
+          templateId: selectedTemplateId,
+          userId: currentUser.uid,
+          newGraphId: crypto.randomUUID(),
+          graphPosition: position,
+        });
+        
+        // The real-time listener will update the UI
+        toast.success('Template placed successfully', { id: 'template-placement' });
+      } catch (error) {
+        console.error('Failed to place template:', error);
+        toast.error('Failed to place template', { id: 'template-placement' });
+      } finally {
+        setIsPlacing(false);
+      }
     } else if (isRootNodeCreationMode && !isPlacing) {
       const currentUser = auth?.currentUser;
       if (!currentUser?.uid) {
@@ -456,27 +466,25 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
       }
 
       setRootNodeCreationMode(false);
+      toast.loading('Creating new root node...', { id: 'root-creation' });
       
       const newGraphId = crypto.randomUUID();
       const newNodeId = crypto.randomUUID();
       const newGraph = createNewGraph(newGraphId, newNodeId, position);
       const rootNode = createNewNode(newNodeId, { x: 0, y: 0 });
 
-      await handleAsyncOperation(
-        async () => {
-          await graphService.createGraph(newGraph);
-          await graphService.createNode(newGraphId, rootNode);
-          await refresh();
-        },
-        {
-          loadingMessage: 'Creating new root node...',
-          successMessage: 'Root node created successfully',
-          errorMessage: 'Failed to create root node',
-          toastId: 'root-node-creation'
-        }
-      );
+      try {
+        await graphService.createGraph(newGraph);
+        await graphService.createNode(newGraphId, rootNode);
+        
+        // The real-time listener will update the state
+        toast.success('Root node created successfully', { id: 'root-creation' });
+      } catch (error) {
+        console.error('Failed to create root node:', error);
+        toast.error('Failed to create root node', { id: 'root-creation' });
+      }
     }
-  }, [isNewNodeCreationMode, selectedParentGraphId, reactFlowInstance, graphService, refresh, resetNodeCreation, graphs, nodes, isPlacing, isPlacementMode, selectedTemplateId, clearSelection, isRootNodeCreationMode, setRootNodeCreationMode, isMultiEditMode, clearSelectedNodes]);
+  }, [isNewNodeCreationMode, selectedParentGraphId, reactFlowInstance, graphService, graphs, nodes, isPlacing, isPlacementMode, selectedTemplateId, clearSelection, isRootNodeCreationMode, setRootNodeCreationMode, isMultiEditMode, clearSelectedNodes]);
 
   const onNodeDoubleClick = useCallback((event: React.MouseEvent, node: Node<FlowNodeData>) => {
     event.preventDefault();
@@ -567,14 +575,16 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
           // Save both to Firestore
           await graphService.createNode(graphId, newNode);
           await graphService.createEdge(graphId, newEdge);
-          await refresh();
-
-          // Open the node info dialog for immediate editing
-          const createdNode = nodes.find(n => n.id === newNodeId);
-          if (createdNode) {
-            setSelectedNode(createdNode);
-            setIsInfoDialogOpen(true);
-          }
+          
+          // The real-time listener will handle the state update, but we need the 
+          // new node for the dialog, so we'll wait a short time to ensure the listener has fired
+          setTimeout(() => {
+            const createdNode = nodes.find(n => n.id === newNodeId);
+            if (createdNode) {
+              setSelectedNode(createdNode);
+              setIsInfoDialogOpen(true);
+            }
+          }, 500);
 
           toast.success('Node created successfully', { id: 'node-creation' });
         } catch (error) {
@@ -586,7 +596,7 @@ const GraphWorkspaceInner = ({ userId }: GraphWorkspaceProps) => {
         }
       }
     },
-    [connectingNodeId, reactFlowInstance, nodes, graphs, graphService, refresh]
+    [connectingNodeId, reactFlowInstance, nodes, graphs, graphService]
   );
 
   // Toggle visibility handler for the node menu

@@ -3,6 +3,8 @@ import type { Graph } from '@/shared/types/graph';
 import type { Node as BaseNode } from '@/shared/types/node';
 import type { Edge as BaseEdge } from '@/shared/types/edge';
 import type { FlowGraph, FlowNode, FlowEdge, WorkspacePosition } from '../types/workspace-types';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { db } from '@/shared/services/firebase/config';
 
 export class WorkspaceService {
   private graphService: FirestoreService<Graph>;
@@ -14,10 +16,12 @@ export class WorkspaceService {
   }
 
   private calculateNodePosition(node: BaseNode, graph: Graph): WorkspacePosition {
-    // Calculate absolute position by adding graph position to node's relative position
+    const graphPosition = graph.graphPosition || { x: 0, y: 0 };
+    const nodePosition = node.nodePosition || { x: 0, y: 0 };
+    
     return {
-      x: (graph.graphPosition?.x || 0) + (node.nodePosition?.x || 0),
-      y: (graph.graphPosition?.y || 0) + (node.nodePosition?.y || 0)
+      x: graphPosition.x + nodePosition.x,
+      y: graphPosition.y + nodePosition.y
     };
   }
 
@@ -106,5 +110,100 @@ export class WorkspaceService {
       console.error('Error fetching graphs:', error);
       throw error;
     }
+  }
+
+  /**
+   * Subscribe to real-time updates for all graphs and their nodes/edges
+   * @param callback Function to call when graphs are updated
+   * @returns Unsubscribe function to clean up listeners
+   */
+  subscribeToGraphs(callback: (graphs: FlowGraph[]) => void): () => void {
+    // Get a reference to the graphs collection
+    const graphsRef = collection(db, `users/${this.userId}/graphs`);
+    const graphsQuery = query(graphsRef);
+    
+    // Track all active subscriptions to clean up later
+    const subscriptions: (() => void)[] = [];
+    
+    // Primary subscription for graph documents
+    const unsubscribeGraphs = onSnapshot(graphsQuery, async (graphsSnapshot) => {
+      try {
+        // If there are no graphs, call the callback with an empty array
+        if (graphsSnapshot.empty) {
+          callback([]);
+          return;
+        }
+        
+        // Transform graphs to FlowGraphs and setup child listeners
+        const graphs: Graph[] = [];
+        graphsSnapshot.forEach(doc => {
+          const graph = doc.data() as Graph;
+          graphs.push(graph);
+        });
+        
+        // Cancel any previous subscriptions to nodes/edges
+        while (subscriptions.length > 0) {
+          const unsub = subscriptions.pop();
+          if (unsub) unsub();
+        }
+        
+        // Setup subscriptions for each graph's nodes and edges
+        const flowGraphsPromises = graphs.map(async (graph) => {
+          const flowGraph = await this.setupGraphSubscriptions(graph, callback, subscriptions);
+          return flowGraph;
+        });
+        
+        // Wait for all graph transformations and send update
+        const flowGraphs = await Promise.all(flowGraphsPromises);
+        callback(flowGraphs);
+      } catch (error) {
+        console.error('Error in graph subscription:', error);
+      }
+    });
+    
+    // Return a function that unsubscribes from everything
+    return () => {
+      unsubscribeGraphs();
+      // Clean up all node/edge subscriptions
+      subscriptions.forEach(unsub => unsub());
+    };
+  }
+  
+  /**
+   * Setup subscriptions for a specific graph's nodes and edges
+   * @param graph The graph to subscribe to
+   * @param callback The main callback to trigger when data changes
+   * @param subscriptions Array to track active subscriptions
+   * @returns The transformed FlowGraph
+   */
+  private async setupGraphSubscriptions(
+    graph: Graph, 
+    callback: (graphs: FlowGraph[]) => void,
+    subscriptions: (() => void)[]
+  ): Promise<FlowGraph> {
+    // Initial transform without subscriptions
+    const initialFlowGraph = await this.transformToFlowGraph(graph);
+    
+    // Setup node subscription
+    const nodesRef = collection(db, `users/${this.userId}/graphs/${graph.graphId}/nodes`);
+    const nodesQuery = query(nodesRef);
+    const unsubNodes = onSnapshot(nodesQuery, async () => {
+      // When nodes change, refresh all graphs
+      const updatedGraphs = await this.fetchAllGraphs();
+      callback(updatedGraphs);
+    });
+    subscriptions.push(unsubNodes);
+    
+    // Setup edge subscription
+    const edgesRef = collection(db, `users/${this.userId}/graphs/${graph.graphId}/edges`);
+    const edgesQuery = query(edgesRef);
+    const unsubEdges = onSnapshot(edgesQuery, async () => {
+      // When edges change, refresh all graphs
+      const updatedGraphs = await this.fetchAllGraphs();
+      callback(updatedGraphs);
+    });
+    subscriptions.push(unsubEdges);
+    
+    return initialFlowGraph;
   }
 } 

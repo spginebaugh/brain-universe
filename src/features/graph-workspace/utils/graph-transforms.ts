@@ -34,7 +34,12 @@ export const transformGraphsToReactFlow = (graphs: FlowGraph[]) => {
         background: node.metadata.backgroundColor || (node.nodeId === graph.rootNodeId ? '#e0f2e9' : '#fff'),
         border: '1px solid #ddd',
         padding: 10,
-        borderRadius: 5
+        borderRadius: 5,
+        fontSize: 16,
+        fontWeight: 500,
+        color: '#333333',
+        minWidth: 200,
+        boxShadow: '0 1px 2px rgba(0,0,0,0.07)'
       }
     }))
   );

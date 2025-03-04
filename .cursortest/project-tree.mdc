@@ -1,0 +1,205 @@
+# Project Tree
+
+```
+├── .cursorrules
+├── .firebaserc
+├── .gitignore
+├── ProjectDocs
+│   ├── PRD.md
+│   └── database_layout_docs
+│       ├── directory_structure.md
+│       └── doc_templates
+│           ├── edge_template.md
+│           ├── graph_template.md
+│           ├── node_template.md
+│           └── user_template.md
+├── README.md
+├── components.json
+├── eslint.config.mjs
+├── firebase.json
+├── firestore.indexes.json
+├── firestore.rules
+├── functions
+│   ├── .eslintrc.js
+│   ├── .gitignore
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── src
+│   │   └── index.ts
+│   ├── tsconfig.dev.json
+│   └── tsconfig.json
+├── next.config.ts
+├── package-lock.json
+├── package.json
+├── postcss.config.mjs
+├── public
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── next.svg
+│   ├── vercel.svg
+│   └── window.svg
+├── src
+│   ├── app
+│   │   ├── deep-research
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx
+│   │   ├── favicon.ico
+│   │   ├── globals.css
+│   │   ├── graph-workspace
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx
+│   │   ├── layout.tsx
+│   │   ├── page.tsx
+│   │   ├── providers.tsx
+│   │   ├── research
+│   │   │   └── page.tsx
+│   │   ├── sign-in
+│   │   │   ├── layout.tsx
+│   │   │   └── page.tsx
+│   │   └── sign-up
+│   │       ├── layout.tsx
+│   │       └── page.tsx
+│   ├── features
+│   │   ├── auth
+│   │   │   ├── components
+│   │   │   │   ├── protected-route.tsx
+│   │   │   │   ├── sign-in-form.tsx
+│   │   │   │   └── sign-up-form.tsx
+│   │   │   ├── hooks
+│   │   │   │   └── use-auth.ts
+│   │   │   ├── index.ts
+│   │   │   ├── layouts
+│   │   │   │   └── auth-layout.tsx
+│   │   │   ├── pages
+│   │   │   │   ├── sign-in.tsx
+│   │   │   │   └── sign-up.tsx
+│   │   │   ├── providers
+│   │   │   │   └── auth-provider.tsx
+│   │   │   ├── schemas
+│   │   │   │   └── auth.schema.ts
+│   │   │   ├── services
+│   │   │   │   └── auth-service.ts
+│   │   │   ├── stores
+│   │   │   │   └── auth-store.ts
+│   │   │   ├── types
+│   │   │   │   └── errors.ts
+│   │   │   └── utils
+│   │   │       ├── error-mapper.ts
+│   │   │       └── middleware.ts
+│   │   ├── deep-research
+│   │   │   ├── components
+│   │   │   │   ├── deep-research-roadmap-dialog.tsx
+│   │   │   │   ├── example_output.json
+│   │   │   │   ├── research-progress.tsx
+│   │   │   │   └── research-ui-components.tsx
+│   │   │   ├── config.ts
+│   │   │   ├── hooks
+│   │   │   │   ├── use-deep-research-roadmap.ts
+│   │   │   │   └── use-research.ts
+│   │   │   ├── services
+│   │   │   │   ├── deep-research-roadmap-service.ts
+│   │   │   │   ├── research-graph
+│   │   │   │   │   ├── graph-builder.ts
+│   │   │   │   │   └── nodes
+│   │   │   │   │       ├── generate-plan.ts
+│   │   │   │   │       ├── plan-web-search.ts
+│   │   │   │   │       ├── section-web-search.ts
+│   │   │   │   │       └── write-section.ts
+│   │   │   │   ├── research-logger.ts
+│   │   │   │   └── research-service.ts
+│   │   │   ├── stores
+│   │   │   │   ├── deep-research-roadmap-store.ts
+│   │   │   │   └── research-store.ts
+│   │   │   ├── types
+│   │   │   │   ├── parser-types.ts
+│   │   │   │   └── research.ts
+│   │   │   └── utils
+│   │   │       └── node-generation-utils.ts
+│   │   ├── graph-workspace
+│   │   │   ├── components
+│   │   │   │   ├── graph-workspace.tsx
+│   │   │   │   ├── node-info-dialog.tsx
+│   │   │   │   ├── node-info-popup.tsx
+│   │   │   │   └── node-menu.tsx
+│   │   │   ├── hooks
+│   │   │   │   ├── use-graph-workspace.ts
+│   │   │   │   └── use-node-reveal-animation.ts
+│   │   │   ├── services
+│   │   │   │   └── workspace-service.ts
+│   │   │   ├── types
+│   │   │   │   └── workspace-types.ts
+│   │   │   └── utils
+│   │   │       ├── entity-templates.ts
+│   │   │       ├── error-handlers.ts
+│   │   │       ├── graph-transforms.ts
+│   │   │       ├── index.ts
+│   │   │       └── position-utils.ts
+│   │   ├── roadmap-generation
+│   │   │   ├── components
+│   │   │   │   └── roadmap-generation.tsx
+│   │   │   ├── hooks
+│   │   │   │   └── use-ai-roadmap.ts
+│   │   │   ├── services
+│   │   │   │   └── ai-roadmap-service.ts
+│   │   │   ├── types
+│   │   │   │   └── ai-roadmap-types.ts
+│   │   │   └── utils
+│   │   │       └── prompt-templates.ts
+│   │   ├── shop-panel
+│   │   │   ├── components
+│   │   │   │   └── shop-panel.tsx
+│   │   │   └── stores
+│   │   │       └── shop-store.ts
+│   │   └── side-bar
+│   │       ├── components
+│   │       │   ├── multi-node-color-menu.tsx
+│   │       │   └── side-bar.tsx
+│   │       ├── hooks
+│   │       │   └── use-template-graphs.ts
+│   │       └── stores
+│   │           ├── edge-creation-store.ts
+│   │           ├── node-creation-store.ts
+│   │           ├── node-selection-store.ts
+│   │           ├── root-node-creation-store.ts
+│   │           └── template-selection-store.ts
+│   ├── middleware.ts
+│   └── shared
+│       ├── components
+│       │   └── ui
+│       │       ├── accordion.tsx
+│       │       ├── alert.tsx
+│       │       ├── badge.tsx
+│       │       ├── button.tsx
+│       │       ├── card.tsx
+│       │       ├── carousel.tsx
+│       │       ├── collapsible.tsx
+│       │       ├── dialog.tsx
+│       │       ├── dropdown-menu.tsx
+│       │       ├── form.tsx
+│       │       ├── input.tsx
+│       │       ├── label.tsx
+│       │       ├── progress.tsx
+│       │       ├── scroll-area.tsx
+│       │       ├── select.tsx
+│       │       └── textarea.tsx
+│       ├── services
+│       │   └── firebase
+│       │       ├── config.ts
+│       │       ├── firestore-service.ts
+│       │       ├── graph-service.ts
+│       │       ├── template-service.ts
+│       │       └── user-service.ts
+│       ├── types
+│       │   ├── db-types.ts
+│       │   ├── edge.ts
+│       │   ├── graph.ts
+│       │   ├── index.ts
+│       │   ├── node.ts
+│       │   ├── shop.ts
+│       │   ├── template-types.ts
+│       │   └── user.ts
+│       └── utils
+│           └── tailwind-utils.ts
+├── storage.rules
+└── tsconfig.json
+```
