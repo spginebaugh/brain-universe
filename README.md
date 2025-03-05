@@ -1,36 +1,117 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# BrainUniverse
 
-## Getting Started
+This project was built in under 2 weeks as part of the GauntletAI program
 
-First, run the development server:
+![Workspace Overview](./images/workspace_zoom_out.png)
 
+BrainUniverse is an interactive, AI-powered knowledge repository and exploration platform designed to help students visualize and track their learning progress, explore new ideas, and build meaningful connections between subjects.
+
+## 🌌 Overview
+
+BrainUniverse structures knowledge in a dynamic, mind-map format where users start with a central idea and expand outward into related topics. 
+
+AI deep-research generated lessons ensure efficient, engaging learning while guiding users through personalized learning paths.
+
+## ✨ Key Features
+
+### 🚀 Automated Roadmap Generation
+
+Generate personalized learning paths based on your interests and goals. The AI analyzes your current knowledge and suggests the most relevant next steps.
+
+![Automated Roadmap Generation](./images/automated_roadmap_generation.png)
+
+### 📊 Flexible Graph Creation
+
+Create and customize your own knowledge graphs with an intuitive interface. Add nodes, connect concepts, and organize your learning journey.
+
+![Flexible Graph Creation 1](./images/flexible_graph_creation_1.png)
+![Flexible Graph Creation 2](./images/flexible_graph_creation_2.png)
+
+### 🔍 Deep Research
+
+Access AI-powered deep research for any concept. Get comprehensive information, explanations, and related resources to enhance your understanding.
+
+![Node Deep Research Info](./images/node_deep_research_info.png)
+
+### 📝 Node Management
+
+Easily manage your knowledge nodes with a powerful context menu. Edit, connect, delete, or research nodes with just a few clicks.
+
+![Node Menu](./images/node_menu.png)
+
+## 🛠️ Technology Stack
+
+BrainUniverse is built with modern web technologies:
+
+- **Frontend**: Next.js, React, TypeScript, Tailwind CSS
+- **State Management**: Zustand, React Flow
+- **UI Components**: Shadcn UI, Radix UI
+- **Backend**: Firebase (Authentication, Firestore, Cloud Functions)
+- **AI Integration**: LangChain, OpenAI, Anthropic
+
+## 🚀 Getting Started
+
+### Prerequisites
+
+- Node.js 18.x or higher
+- npm or yarn
+- Firebase account
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/brainuniverse.git
+cd brainuniverse
+```
+
+2. Install dependencies:
+```bash
+npm install
+# or
+yarn install
+```
+
+3. Set up environment variables:
+Create a `.env.local` file in the root directory with your Firebase and AI provider credentials.
+
+4. Run the development server:
 ```bash
 npm run dev
 # or
 yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+5. Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 🔒 Authentication
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+BrainUniverse uses Firebase Authentication for user management. Users can sign up, sign in, and manage their profiles securely.
 
-## Learn More
+## 📊 Database Structure
 
-To learn more about Next.js, take a look at the following resources:
+The project uses Firebase Firestore with the following structure:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```
+users
+  └─ {userId} (doc) // User profile
+        └─ graphs (subcollection)
+            └─ {graphId} (doc) // Graph profile
+                ├─ nodes (subcollection)
+                └─ edges (subcollection)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+templates
+    └─ {template_source_name} (subcollection) // Template source
+        └─ {subject} (subcollection) // e.g. Math
+                └─ {graphId} (doc) // Graph profile
+                    ├─ nodes (subcollection)
+                    └─ edges (subcollection)
+```
 
-## Deploy on Vercel
+## 🙏 Acknowledgements
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [Next.js](https://nextjs.org/)
+- [React Flow](https://reactflow.dev/)
+- [Firebase](https://firebase.google.com/)
+- [Shadcn UI](https://ui.shadcn.com/)
+- [LangChain](https://js.langchain.com/)
