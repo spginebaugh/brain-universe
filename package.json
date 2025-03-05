@@ -71,7 +71,6 @@
     "dotenv": "^16.4.5",
     "eslint": "^9",
     "eslint-config-next": "15.1.7",
-    "firebase-admin": "^13.1.0",
     "https-browserify": "^1.0.0",
     "os-browserify": "^0.3.0",
     "path-browserify": "^1.0.1",
