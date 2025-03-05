@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 
-export const protectedPaths = ['/graph-workspace', '/graph-workspace/*'];
+export const protectedPaths = ['/graph-workspace', '/graph-workspace/*', '/research', '/research/*'];
 export const authPaths = ['/sign-in', '/sign-up'];
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

@@ -1,6 +1,6 @@
 'use client';
 
-import { Network, ShoppingCart, Plus, PlusSquare, ArrowRightCircle, Palette } from 'lucide-react';
+import { Network, ShoppingCart, Plus, PlusSquare, ArrowRightCircle, Palette, UserCircle, LogOut } from 'lucide-react';
 import { useTemplateGraphs } from '@/features/side-bar/hooks/use-template-graphs';
 import { useShopStore } from '@/features/shop-panel/stores/shop-store';
 import {
@@ -8,6 +8,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
   DropdownMenuItem,
+  DropdownMenuSeparator,
 } from '@/shared/components/ui/dropdown-menu';
 import { TemplateGraph } from '@/shared/types/template-types';
 import { useTemplateSelectionStore } from '../stores/template-selection-store';
@@ -15,6 +16,8 @@ import { useRootNodeCreationStore } from '../stores/root-node-creation-store';
 import { useNodeCreationStore } from '../stores/node-creation-store';
 import { useEdgeCreationStore } from '../stores/edge-creation-store';
 import { useNodeSelectionStore } from '../stores/node-selection-store';
+import { useAuth } from '@/features/auth/hooks/use-auth';
+import { useRouter } from 'next/navigation';
 
 interface SideBarProps {
   className?: string;
@@ -28,9 +31,20 @@ export const SideBar = ({ className = '' }: SideBarProps) => {
   const { setCreationMode: setNodeCreationMode } = useNodeCreationStore();
   const { setCreationMode: setEdgeCreationMode } = useEdgeCreationStore();
   const { selectedNodes, isMultiEditMode, setMultiEditMode } = useNodeSelectionStore();
+  const { signOut, user } = useAuth();
+  const router = useRouter();
 
   const handleMultiEditClick = () => {
     setMultiEditMode(!isMultiEditMode);
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      router.push('/sign-in');
+    } catch (error) {
+      console.error('Failed to sign out:', error);
+    }
   };
 
   return (
@@ -115,6 +129,36 @@ export const SideBar = ({ className = '' }: SideBarProps) => {
       >
         <ShoppingCart className="w-6 h-6" />
       </button>
+
+      {/* Spacer to push profile to bottom */}
+      <div className="flex-grow"></div>
+
+      {/* Profile dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            className="w-10 h-10 rounded-lg bg-gray-800 hover:bg-gray-700 flex items-center justify-center text-gray-300 hover:text-white transition-colors"
+            title="Profile"
+          >
+            <UserCircle className="w-6 h-6" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-56">
+          {user && (
+            <>
+              <div className="px-2 py-1.5">
+                <p className="text-sm font-medium">{user.displayName || user.email}</p>
+                <p className="text-xs text-gray-500 truncate">{user.email}</p>
+              </div>
+              <DropdownMenuSeparator />
+            </>
+          )}
+          <DropdownMenuItem onClick={handleSignOut} className="text-red-500 focus:text-red-500 cursor-pointer">
+            <LogOut className="w-4 h-4 mr-2" />
+            Sign out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 };
