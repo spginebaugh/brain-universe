@@ -1,0 +1,6 @@
+# Scripts directory
+scripts/
+scripts/**/*
+
+# Other files to ignore
+*.log

@@ -48,6 +48,12 @@ Backend and Database
  - Follow Firebase guidelines for security and performance.
  - Use Firebase Auth for user authentication and management.
 
+Firebase Cloud functions
+ - Use Node.js 20 for firebase cloud functions.
+ - Use the firebase emulators for local firebase cloud functions testing.
+ - Always use 2nd generation firebase cloud functions (firebase-functions/v2/).
+ - Use 'nvm use' after changing directories to the functions directory to ensure the correct node version is used.
+
 The firebase directory structure is as below:
 ```
 users

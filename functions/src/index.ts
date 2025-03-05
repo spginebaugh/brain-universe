@@ -7,13 +7,58 @@
  * See a full list of supported triggers at https://firebase.google.com/docs/functions
  */
 
-//import {onRequest} from "firebase-functions/v2/https";
-//import * as logger from "firebase-functions/logger";
+import { onCall } from "firebase-functions/v2/https";
+import * as logger from "firebase-functions/logger";
+import { defineSecret } from "firebase-functions/params";
 
-// Start writing functions
-// https://firebase.google.com/docs/functions/typescript
+// Import roadmap generation types
+import { AIRoadmapInput, AIRoadmapResponse } from "./types/ai-roadmap-types";
+import { generateRoadmap } from "./services/roadmap-service";
 
-// export const helloWorld = onRequest((request, response) => {
-//   logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
+// Define secrets
+const openaiApiKey = defineSecret("OPENAI_API_KEY");
+
+// Roadmap generation endpoint
+export const generateAIRoadmap = onCall({
+  secrets: [openaiApiKey],
+  cors: true, // Enable CORS for all origins
+}, async (request) => {
+  try {
+    // Validate auth
+    if (!request.auth) {
+      throw new Error("Unauthorized access");
+    }
+
+    logger.info("Roadmap generation request received", {
+      uid: request.auth.uid,
+    });
+
+    // Get input data from request
+    const input = request.data as AIRoadmapInput;
+
+    // Input validation
+    if (!input.subject || !input.numberOfTopics) {
+      throw new Error("Invalid input parameters");
+    }
+
+    // Call the roadmap generation service
+    const result = await generateRoadmap(input, openaiApiKey.value());
+
+    logger.info("Roadmap generation completed successfully", {
+      uid: request.auth.uid,
+    });
+
+    return result;
+  } catch (error) {
+    logger.error("Roadmap generation failed", {
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
+
+    const response: AIRoadmapResponse = {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
+
+    return response;
+  }
+});
