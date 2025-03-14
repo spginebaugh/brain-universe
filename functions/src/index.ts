@@ -12,8 +12,11 @@ import * as logger from "firebase-functions/logger";
 import { defineSecret } from "firebase-functions/params";
 
 // Import roadmap generation types
-import { AIRoadmapInput, AIRoadmapResponse } from "./types/ai-roadmap-types";
-import { generateRoadmap } from "./services/roadmap-service";
+import { AIRoadmapInput, AIRoadmapResponse } from "./simple-roadmap-generation/types/ai-roadmap-types";
+import { generateRoadmap } from "./simple-roadmap-generation/services/roadmap-service";
+
+// Import deep research function
+import { runDeepResearch } from "./deep-research";
 
 // Define secrets
 const openaiApiKey = defineSecret("OPENAI_API_KEY");
@@ -62,3 +65,6 @@ export const generateAIRoadmap = onCall({
     return response;
   }
 });
+
+// Export the deep research function
+export { runDeepResearch };

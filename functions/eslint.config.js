@@ -25,7 +25,7 @@ module.exports = [
       "indent": ["error", 2],
       // Relaxing some rules that are causing issues
       "max-len": ["warn", { "code": 120 }], // Increase line length limit
-      "valid-jsdoc": "warn", // Make JSDoc warnings instead of errors
+      "valid-jsdoc": "off", // Disable JSDoc requirement
       "object-curly-spacing": ["error", "always"], // Consistent with existing code
     },
     // Globally ignored files and directories
@@ -53,6 +53,9 @@ module.exports = [
     },
     rules: {
       ...typescriptPlugin.configs.recommended.rules,
+      // Disable TypeScript JSDoc requirements
+      "@typescript-eslint/require-jsdoc": "off",
+      "@typescript-eslint/valid-jsdoc": "off",
     },
   },
 ]; 

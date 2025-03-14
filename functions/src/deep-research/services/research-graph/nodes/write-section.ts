@@ -1,26 +1,31 @@
-import { ChatOpenAI } from '@langchain/openai';
-import { RunnableSequence, RunnableLambda } from '@langchain/core/runnables';
-import { PromptTemplate } from '@langchain/core/prompts';
-import { StructuredOutputParser } from '@langchain/core/output_parsers';
-import { z } from 'zod';
-import { ResearchState, Chapter, ChapterContent, RESEARCH_PHASES } from '../../../types/research';
+import { ChatOpenAI } from "@langchain/openai";
+import { RunnableSequence, RunnableLambda } from "@langchain/core/runnables";
+import { PromptTemplate } from "@langchain/core/prompts";
+import { StructuredOutputParser } from "@langchain/core/output_parsers";
+import { z } from "zod";
+import {
+  ResearchState,
+  Chapter,
+  ChapterContent,
+  RESEARCH_PHASES,
+} from "../../../types/research";
 
 // Define the schema for structured output
 const sourceSchema = z.object({
   title: z.string().describe("The title of the source"),
-  url: z.string().describe("The URL of the source")
+  url: z.string().describe("The URL of the source"),
 });
 
 const subTopicSchema = z.object({
   title: z.string().describe("The title of the sub-topic"),
   description: z.string().describe("A brief description of the sub-topic"),
   content: z.string().describe("In-depth lesson content about the sub-topic (at least 1000 words)"),
-  sources: z.array(sourceSchema).describe("At least one relevant source with title and URL")
+  sources: z.array(sourceSchema).describe("At least one relevant source with title and URL"),
 });
 
 const chapterContentSchema = z.object({
   overview: z.string().describe("A 100-150 word overview of the chapter"),
-  subTopics: z.record(z.string(), subTopicSchema).describe("A record of sub-topics, with each key being the sub-topic name")
+  subTopics: z.record(z.string(), subTopicSchema).describe("A record of sub-topics, with each key being the sub-topic name"),
 });
 
 const WRITE_CHAPTER_TEMPLATE = `You are an expert technical teacher crafting a detailed lesson for one chapter of a learning roadmap.
@@ -60,6 +65,9 @@ interface WriteStateExtension {
 
 type ExtendedResearchState = ResearchState & WriteStateExtension;
 
+/**
+ * Write section node
+ */
 export function writeSectionNode(model: ChatOpenAI) {
   type PrepareOutput = {
     chapterTitle: string;
@@ -78,62 +86,62 @@ export function writeSectionNode(model: ChatOpenAI) {
   const prepareData = new RunnableLambda({
     func: (state: ExtendedResearchState) => {
       if (!state.currentChapter) {
-        throw new Error('Missing chapter in state');
+        throw new Error("Missing chapter in state");
       }
-      
+
       if (!state.sourceStr) {
-        throw new Error('Missing source data in state');
+        throw new Error("Missing source data in state");
       }
 
       return {
         chapterTitle: state.currentChapter.title,
         chapterDescription: state.currentChapter.description,
-        subTopicNames: state.currentChapter.subTopicNames.join(', '),
+        subTopicNames: state.currentChapter.subTopicNames.join(", "),
         sourceData: state.sourceStr,
         format_instructions: formatInstructions,
-        currentState: state
+        currentState: state,
       };
-    }
+    },
   });
 
   // Transform the model output to include state
   const addState = new RunnableLambda({
     func: (input: { response: PrepareOutput; generated: ChapterContent }) => ({
       response: input.generated,
-      currentState: input.response.currentState
-    })
+      currentState: input.response.currentState,
+    }),
   });
 
   const processResponse = new RunnableLambda({
     func: (input: { response: ChapterContent; currentState: ExtendedResearchState }) => {
-      console.log('Processing chapter content response:', input.response);
-      
+      console.log("Processing chapter content response:", input.response);
+
       // Validate the content structure
-      if (!input.response || typeof input.response !== 'object') {
-        console.error('Invalid chapter content response:', input.response);
-        throw new Error('Invalid chapter content response: not an object');
+      if (!input.response || typeof input.response !== "object") {
+        console.error("Invalid chapter content response:", input.response);
+        throw new Error("Invalid chapter content response: not an object");
       }
-      
+
       if (!input.response.overview) {
-        console.warn('Missing overview in chapter content:', input.response);
+        console.warn("Missing overview in chapter content:", input.response);
         // Set default overview if missing
         input.response.overview = `Chapter overview for ${input.currentState.currentChapter?.title}`;
       }
-      
-      if (!input.response.subTopics || typeof input.response.subTopics !== 'object') {
-        console.warn('Missing or invalid subTopics in chapter content:', input.response);
+
+      if (!input.response.subTopics || typeof input.response.subTopics !== "object") {
+        console.warn("Missing or invalid subTopics in chapter content:", input.response);
         // Create default subTopics structure if missing
         input.response.subTopics = {};
       }
-      
+
       // Ensure all expected subTopics are present
       if (input.currentState.currentChapter?.subTopicNames) {
         const expectedSubTopics = input.currentState.currentChapter.subTopicNames;
         const actualSubTopics = Object.keys(input.response.subTopics);
-        
-        console.log('Expected subTopics:', expectedSubTopics);
-        console.log('Actual subTopics:', actualSubTopics);
-        
+
+        console.log("Expected subTopics:", expectedSubTopics);
+        console.log("Actual subTopics:", actualSubTopics);
+
         // Add missing subTopics
         expectedSubTopics.forEach((name: string) => {
           if (!input.response.subTopics[name]) {
@@ -142,52 +150,52 @@ export function writeSectionNode(model: ChatOpenAI) {
               title: name,
               description: `Description for ${name}`,
               content: `Default content for ${name}`,
-              sources: []
+              sources: [],
             };
           }
         });
       }
-      
+
       // Ensure currentChapter exists
       if (!input.currentState.currentChapter) {
-        throw new Error('Missing current chapter in state');
+        throw new Error("Missing current chapter in state");
       }
-      
+
       const updatedChapter: Chapter = {
         ...input.currentState.currentChapter,
         content: input.response,
-        status: 'completed',
-        phase: RESEARCH_PHASES.CHAPTER_WRITING
+        status: "completed",
+        phase: RESEARCH_PHASES.CHAPTER_WRITING,
       };
 
       // Update the chapter in the chapters map
       const updatedChapters = {
         ...input.currentState.chapters,
-        [updatedChapter.title]: updatedChapter
+        [updatedChapter.title]: updatedChapter,
       };
 
       // Update progress
       const updatedProgress = {
         ...input.currentState.progress,
-        completedChapters: input.currentState.progress.completedChapters + 1
+        completedChapters: input.currentState.progress.completedChapters + 1,
       };
 
       return {
         ...input.currentState,
         currentChapterTitle: null,
         chapters: updatedChapters,
-        progress: updatedProgress
+        progress: updatedProgress,
       };
-    }
+    },
   });
 
   return RunnableSequence.from([
     prepareData,
     {
       response: new RunnableLambda({ func: (x: PrepareOutput) => x }),
-      generated: prompt.pipe(model).pipe(parser)
+      generated: prompt.pipe(model).pipe(parser),
     },
     addState,
-    processResponse
+    processResponse,
   ]);
-} 
+}

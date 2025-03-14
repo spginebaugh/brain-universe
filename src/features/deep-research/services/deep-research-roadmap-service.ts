@@ -12,7 +12,7 @@ import {
   NodeGenerationOptions
 } from '../utils/node-generation-utils';
 import { useDeepResearchRoadmapStore } from '../stores/deep-research-roadmap-store';
-import { NodeStatus } from '@/shared/types/node';
+import { NodeStatus, NodeMetadata } from '@/shared/types/node';
 
 export interface RoadmapGenerationInput {
   rootNodeId: string;
@@ -76,112 +76,187 @@ export class DeepResearchRoadmapService {
   }
   
   async generateRoadmap(input: RoadmapGenerationInput): Promise<void> {
-    const store = useDeepResearchRoadmapStore.getState();
-    
-    // Reset store state
-    store.reset();
-    store.setIsLoading(true);
-    
-    // Reset local tracking
-    this.generatedNodeIds = {};
-    this.generatedSubtopicIds = {};
-    
-    // Create abort controller
+    // Create an abort controller
     this.abortController = new AbortController();
     
+    // Get a reference to the store
+    const store = useDeepResearchRoadmapStore.getState();
+    
     try {
-      // Start research
-      const request: ResearchRequest = {
+      store.setIsLoading(true);
+      store.setError(null);
+      
+      // Set initial progress
+      store.setProgress(0);
+      store.setCurrentPhaseLabel('Starting research...');
+      
+      // Create the research request
+      const researchRequest: ResearchRequest = {
         query: input.rootNodeTitle,
         numberOfChapters: input.numberOfChapters
       };
       
-      let finalResearchState: ResearchState | null = null;
+      // Start the research process - this now uses Firebase cloud functions
+      // We'll get events from Firestore in real-time as the cloud function processes the research
+      let lastState: ResearchState | null = null;
       
-      // Options for node generation
-      const nodeOptions: NodeGenerationOptions = {
-        parentNodeId: input.rootNodeId,
-        parentNodePosition: input.rootNodePosition,
-        graphId: input.graphId,
-        graphName: input.graphName,
-        graphPosition: input.graphPosition
-      };
-      
-      // Process research events but don't create nodes yet
-      for await (const event of this.researchService.startResearch(request)) {
-        // Check if canceled
-        if (store.cancelRequested) {
-          this.abortController.abort();
+      for await (const event of this.researchService.startResearch(researchRequest)) {
+        // Check if we've been cancelled
+        if (this.abortController?.signal.aborted) {
+          console.log('Research was cancelled');
           break;
         }
         
-        // Update session ID in store if not set
-        if (!store.sessionId && event.sessionId) {
-          store.setSessionId(event.sessionId);
-        }
-        
-        // Handle different event types
-        if (event.type === 'error') {
-          store.setError(event.error);
-          break;
-        }
-        
-        if (event.type === 'progress' && event.chapters.length > 0) {
-          // We can infer the state from the event data
-          const inferredState: ResearchState = {
-            researchSubject: input.rootNodeTitle,
-            numberOfChapters: input.numberOfChapters,
-            initialResearch: { queries: [], results: [] },
-            plannedChapters: event.chapters,
-            chapters: event.chapters.reduce((acc, chapter) => {
-              acc[chapter.title] = chapter;
-              return acc;
-            }, {} as Record<string, typeof event.chapters[0]>),
-            chapterOrder: event.chapters.map(chapter => chapter.title),
-            currentChapterTitle: event.chapters.find(c => 
-              c.status === 'researching' || c.status === 'writing'
-            )?.title || null,
-            currentPhase: event.phase,
-            progress: {
-              totalChapters: event.chapters.length,
-              completedChapters: event.chapters.filter(c => c.status === 'completed').length
+        if (event.type === 'progress') {
+          const chapters = event.chapters;
+          
+          if (chapters && chapters.length > 0) {
+            // Find the first chapter with content
+            const completedChapters = chapters.filter(c => 
+              c.status === 'completed' && c.content?.overview
+            );
+            
+            // Create placeholder nodes for planning phase
+            if (event.phase === RESEARCH_PHASES.PLANNING && chapters.length > 0) {
+              // Create placeholder nodes for all chapters
+              const options: NodeGenerationOptions = {
+                parentNodeId: input.rootNodeId,
+                parentNodePosition: input.rootNodePosition,
+                graphId: input.graphId,
+                graphName: input.graphName,
+                graphPosition: input.graphPosition
+              };
+              
+              const result = generatePlaceholderNodesFromChapters(chapters, options);
+              
+              // Store the node IDs for later reference
+              result.dbNodes.forEach(node => {
+                // Use type assertion to access custom metadata properties
+                const metadata = node.metadata as NodeMetadata & { chapterTitle?: string };
+                if (metadata.chapterTitle) {
+                  // Use type assertion to access the node ID
+                  const nodeId = (node as unknown as { nodeId: string }).nodeId;
+                  this.generatedNodeIds[metadata.chapterTitle] = nodeId;
+                }
+              });
+              
+              store.setProgress(10); // Planning complete = 10% progress
+              store.setCurrentPhaseLabel('Planning chapters...');
             }
-          };
+            
+            // For any completed chapters, create content nodes
+            for (const chapter of completedChapters) {
+              if (
+                chapter.content &&
+                !this.generatedSubtopicIds[chapter.title]
+              ) {
+                // Generate subtopic nodes
+                const parentNodeId = this.generatedNodeIds[chapter.title] || input.rootNodeId;
+                const parentPosition = { x: 0, y: 0 }; // Will be calculated properly
+                
+                const result = generateSubtopicNodesForChapter(
+                  chapter,
+                  parentNodeId,
+                  parentPosition,
+                  input.graphId,
+                  input.graphName,
+                  input.graphPosition
+                );
+                
+                // Store subtopic node IDs
+                result.dbNodes.forEach(node => {
+                  // Use type assertion to access custom metadata properties
+                  const metadata = node.metadata as NodeMetadata & { subtopicTitle?: string };
+                  if (metadata.subtopicTitle && chapter.title) {
+                    if (!this.generatedSubtopicIds[chapter.title]) {
+                      this.generatedSubtopicIds[chapter.title] = {};
+                    }
+                    // Use type assertion to access the node ID
+                    const nodeId = (node as unknown as { nodeId: string }).nodeId;
+                    this.generatedSubtopicIds[chapter.title][metadata.subtopicTitle] = nodeId;
+                  }
+                });
+                
+                // Update the parent node's status to 'completed'
+                const updatedNode = updateCompletedChapter(chapter);
+                
+                // Save the updated node to Firestore
+                if (this.generatedNodeIds[chapter.title]) {
+                  await this.graphService.updateNode(
+                    input.graphId,
+                    this.generatedNodeIds[chapter.title],
+                    updatedNode
+                  );
+                }
+              }
+            }
+          }
           
-          // Update the state in the store
-          finalResearchState = inferredState;
-          store.setResearchState(inferredState);
-          
-          // Calculate and update progress
-          const progress = this.calculateProgress(inferredState);
-          store.setProgress(progress);
-          store.setCurrentPhaseLabel(this.getPhaseLabel(inferredState));
-        }
-        
-        // Handle final output - this is where we'll create all nodes once research is complete
-        if (event.isFinalOutput && finalResearchState) {
-          store.setProgress(100);
-          store.setCurrentPhaseLabel('Research Complete');
-          
-          // Now that research is complete, create all the nodes at once
-          await this.createAllNodesWithCompleteData(finalResearchState, nodeOptions);
-          break;
+          // Extract state for progress calculation
+          if (event.phase !== RESEARCH_PHASES.COMPLETE) {
+            // Look through chapters to build a state object
+            const state: ResearchState = {
+              researchSubject: input.rootNodeTitle,
+              numberOfChapters: input.numberOfChapters,
+              plannedChapters: event.chapters,
+              chapters: event.chapters.reduce((acc, chapter) => {
+                acc[chapter.title] = chapter;
+                return acc;
+              }, {} as Record<string, typeof event.chapters[0]>),
+              chapterOrder: event.chapters.map(c => c.title),
+              currentChapterTitle: event.chapters.find(c => c.status === 'writing')?.title || null,
+              currentPhase: event.phase,
+              initialResearch: {
+                queries: [],
+                results: []
+              },
+              progress: {
+                totalChapters: input.numberOfChapters,
+                completedChapters: event.chapters.filter(c => c.status === 'completed').length
+              }
+            };
+            
+            lastState = state;
+            
+            // Update progress based on state
+            const progress = this.calculateProgress(state);
+            store.setProgress(progress);
+            store.setCurrentPhaseLabel(this.getPhaseLabel(state));
+          } else {
+            // Research is complete
+            store.setProgress(100);
+            store.setCurrentPhaseLabel('Research complete!');
+            store.setIsLoading(false);
+          }
+        } else if (event.type === 'error') {
+          console.error('Research error:', event.error);
+          store.setError(event.error);
+          store.setIsLoading(false);
         }
       }
       
-      // Make sure final phase is marked as complete
-      if (finalResearchState && finalResearchState.currentPhase === RESEARCH_PHASES.COMPLETE) {
-        store.setProgress(100);
-        store.setCurrentPhaseLabel('Research Complete');
+      // If we have a complete state, create all the remaining nodes
+      if (lastState) {
+        await this.createAllNodesWithCompleteData(
+          lastState,
+          {
+            parentNodeId: input.rootNodeId,
+            parentNodePosition: input.rootNodePosition,
+            graphId: input.graphId,
+            graphName: input.graphName,
+            graphPosition: input.graphPosition
+          }
+        );
       }
       
-      // Set loading to false
+      // Final update
       store.setIsLoading(false);
+      store.setProgress(100);
+      store.setCurrentPhaseLabel('Research and graph generation complete!');
       
     } catch (error) {
-      // Handle errors
-      console.error('Error in research roadmap generation:', error);
-      store.setError(error instanceof Error ? error.message : 'An error occurred');
+      console.error('Error generating roadmap:', error);
+      store.setError((error as Error).message);
       store.setIsLoading(false);
     } finally {
       this.abortController = null;

@@ -28,6 +28,10 @@ interface UseResearchReturn {
   } | undefined;
 }
 
+/**
+ * Hook to interact with the deep research functionality
+ * This now works with Firebase Cloud Functions rather than local processing
+ */
 export function useResearch(): UseResearchReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +58,7 @@ export function useResearch(): UseResearchReturn {
           setError(null);
         }
         
-        // Update loading state based on session completion
+        // Update loading state based on session completion or in progress flag
         setIsLoading(!session.isComplete);
       } else {
         console.warn('Session not found for ID:', currentSession);
@@ -62,13 +66,20 @@ export function useResearch(): UseResearchReturn {
     }
   }, [currentSession, getSession]);
 
+  /**
+   * Starts a new research process by:
+   * 1. Calling the Firebase Cloud Function
+   * 2. Setting up a Firestore listener for updates
+   * 3. Processing events as they arrive
+   */
   const startResearch = useCallback(async (request: ResearchRequest) => {
     console.log('Starting research with request:', request);
     setIsLoading(true);
     setError(null);
 
     try {
-      // The service will create a session in the store
+      // All the Firebase Cloud Function and Firestore listeners setup 
+      // is handled in the service
       let eventCount = 0;
       for await (const event of researchService.startResearch(request)) {
         eventCount++;
@@ -81,7 +92,7 @@ export function useResearch(): UseResearchReturn {
         }
         
         // Set loading to false when we receive the final output
-        if (event.isFinalOutput) {
+        if (event.isFinalOutput || event.isProcessComplete) {
           console.log('Final output received, research complete');
           setIsLoading(false);
         }

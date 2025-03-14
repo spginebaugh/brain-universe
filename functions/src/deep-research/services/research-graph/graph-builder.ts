@@ -1,24 +1,24 @@
-import { ChatOpenAI } from '@langchain/openai';
-import { TavilySearchResults } from '@langchain/community/tools/tavily_search';
-import { 
-  ResearchConfig, 
-  ResearchState, 
-  RESEARCH_PHASES, 
+import { ChatOpenAI } from "@langchain/openai";
+import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import {
+  ResearchConfig,
+  ResearchState,
+  RESEARCH_PHASES,
   PhaseResult,
   InitialResearchPhaseResult,
   PlanningPhaseResult,
   ChapterResearchPhaseResult,
   ChapterWritingPhaseResult,
   CompletePhaseResult,
-  Chapter
-} from '../../types/research';
-import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
+  Chapter,
+} from "../../types/research";
+import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
 
 // Node implementations will be imported from separate files
-import { planWebSearchNode } from './nodes/plan-web-search';
-import { generatePlanNode } from './nodes/generate-plan';
-import { sectionWebSearchNode } from './nodes/section-web-search';
-import { writeSectionNode } from './nodes/write-section';
+import { planWebSearchNode } from "./nodes/plan-web-search";
+import { generatePlanNode } from "./nodes/generate-plan";
+import { sectionWebSearchNode } from "./nodes/section-web-search";
+import { writeSectionNode } from "./nodes/write-section";
 
 export interface ResearchGraph {
   stream: (initialState: ResearchState) => AsyncGenerator<PhaseResult, void, unknown>;
@@ -34,9 +34,12 @@ interface ExtendedResearchState extends ResearchState {
   currentChapter?: Chapter;
 }
 
+/**
+ * Builds the research graph
+ */
 export function buildResearchGraph(
-  config: ResearchConfig, 
-  options: GraphBuilderOptions = {}
+  config: ResearchConfig,
+  options: GraphBuilderOptions = {},
 ): ResearchGraph {
   const { callbacks } = options;
 
@@ -45,21 +48,21 @@ export function buildResearchGraph(
     modelName: config.plannerModel,
     temperature: 0.7,
     openAIApiKey: config.openai.apiKey,
-    callbacks
+    callbacks,
   });
 
   const writerModel = new ChatOpenAI({
     modelName: config.writerModel,
     temperature: 0.7,
     openAIApiKey: config.openai.apiKey,
-    callbacks
+    callbacks,
   });
 
   // Initialize tools with API keys and callbacks
   const searchTool = new TavilySearchResults({
     apiKey: config.tavily.apiKey,
     callbacks,
-    maxResults: 5
+    maxResults: 5,
   });
 
   // Create node instances
@@ -69,7 +72,7 @@ export function buildResearchGraph(
   const chapterWritingNode = writeSectionNode(writerModel);
 
   return {
-    async *stream(initialState: ResearchState) {
+    async* stream(initialState: ResearchState) {
       // Use the provided initial state directly
       let state: ExtendedResearchState = initialState;
 
@@ -77,96 +80,96 @@ export function buildResearchGraph(
         // Initial Research phase
         if (!state.plannedChapters.length) {
           const initialResearchResult = await initialResearchNode.invoke(state, { callbacks });
-          
+
           // Create the phase result
           const initialResearchPhaseResult: InitialResearchPhaseResult = {
             phase: RESEARCH_PHASES.INITIAL_RESEARCH,
             isPhaseComplete: true,
             isFinalOutput: false,
             queries: initialResearchResult.queries || [],
-            results: initialResearchResult.results || []
+            results: initialResearchResult.results || [],
           };
-          
+
           yield initialResearchPhaseResult;
-          
+
           // Update state with initial research results
-          state = { 
-            ...state, 
+          state = {
+            ...state,
             initialResearch: {
               queries: initialResearchPhaseResult.queries,
-              results: initialResearchPhaseResult.results
+              results: initialResearchPhaseResult.results,
             },
-            currentPhase: RESEARCH_PHASES.INITIAL_RESEARCH
+            currentPhase: RESEARCH_PHASES.INITIAL_RESEARCH,
           };
 
           // Planning phase
           const planResult = await planNode.invoke(state, { callbacks });
-          
+
           // Parse planned chapters if needed
           const plannedChapters = planResult.plannedChapters || [];
-          
+
           // Create the phase result
           const planningPhaseResult: PlanningPhaseResult = {
             phase: RESEARCH_PHASES.PLANNING,
             isPhaseComplete: true,
             isFinalOutput: false,
-            plannedChapters
-          };
-          
-          yield planningPhaseResult;
-          
-          // Update state with planning results
-          state = { 
-            ...state, 
             plannedChapters,
-            chapterOrder: plannedChapters.map(chapter => chapter.title),
+          };
+
+          yield planningPhaseResult;
+
+          // Update state with planning results
+          state = {
+            ...state,
+            plannedChapters,
+            chapterOrder: plannedChapters.map((chapter: Chapter) => chapter.title),
             chapters: plannedChapters.reduce<Record<string, Chapter>>((acc, chapter) => {
               // Create a proper Chapter object with all required properties
               acc[chapter.title] = {
                 title: chapter.title,
                 description: chapter.description,
                 subTopicNames: chapter.subTopicNames,
-                status: 'pending',
+                status: "pending",
                 phase: RESEARCH_PHASES.PLANNING,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
               };
               return acc;
             }, {}),
             currentPhase: RESEARCH_PHASES.PLANNING,
             progress: {
               ...state.progress,
-              totalChapters: plannedChapters.length
-            }
+              totalChapters: plannedChapters.length,
+            },
           };
         }
 
         // Chapter research and writing loop
         while (state.progress.completedChapters < state.progress.totalChapters) {
           // Find the next chapter to process
-          const nextChapterTitle = state.currentChapterTitle || 
-            state.chapterOrder.find(title => state.chapters[title].status === 'pending');
-          
+          const nextChapterTitle = state.currentChapterTitle ||
+            state.chapterOrder.find((title: string) => state.chapters[title].status === "pending");
+
           if (!nextChapterTitle) {
-            console.warn('No pending chapters found, but not all chapters are completed');
+            console.warn("No pending chapters found, but not all chapters are completed");
             break;
           }
-          
+
           // Update current chapter
           state = {
             ...state,
-            currentChapterTitle: nextChapterTitle
+            currentChapterTitle: nextChapterTitle,
           };
-          
+
           // Chapter Research phase
           const chapterResearchResult = await chapterResearchNode.invoke(state, { callbacks });
-          
+
           // Parse the search results from JSON string
           const searchOutput = JSON.parse(chapterResearchResult.content);
-          
+
           // Extract research data
           const queries = searchOutput.queries || [];
           const results = searchOutput.results || [];
-          
+
           // Create the phase result
           const chapterResearchPhaseResult: ChapterResearchPhaseResult = {
             phase: RESEARCH_PHASES.CHAPTER_RESEARCH,
@@ -174,11 +177,11 @@ export function buildResearchGraph(
             isFinalOutput: false,
             chapterTitle: nextChapterTitle,
             queries,
-            results
+            results,
           };
-          
+
           yield chapterResearchPhaseResult;
-          
+
           // Update state with research results and prepare for writing phase
           state = {
             ...state,
@@ -188,85 +191,78 @@ export function buildResearchGraph(
                 ...state.chapters[nextChapterTitle],
                 phase: RESEARCH_PHASES.CHAPTER_RESEARCH,
                 timestamp: new Date().toISOString(),
-                status: 'researching',
+                status: "researching",
                 research: {
                   queries,
-                  results
-                }
-              }
+                  results,
+                },
+              },
             },
             currentPhase: RESEARCH_PHASES.CHAPTER_RESEARCH,
             // Add the source string for the writing phase
             sourceStr: chapterResearchResult.sourceStr,
             // Add the current chapter for the writing phase
-            currentChapter: chapterResearchResult.currentChapter
+            currentChapter: chapterResearchResult.currentChapter,
           };
 
           // Chapter Writing phase
           if (!state.currentChapter) {
-            throw new Error('Missing current chapter for writing phase');
+            throw new Error("Missing current chapter for writing phase");
           }
-          
+
           if (!state.sourceStr) {
-            throw new Error('Missing source data for writing phase');
+            throw new Error("Missing source data for writing phase");
           }
-          
+
           const chapterWritingResult = await chapterWritingNode.invoke(state, { callbacks });
-          
+
           // Extract content from the updated state
           const updatedChapter = chapterWritingResult.chapters[nextChapterTitle];
           const content = updatedChapter?.content;
-          
+
           if (!content) {
             console.error(`No content generated for chapter "${nextChapterTitle}"`);
             continue;
           }
-          
+
           // Create the phase result
           const chapterWritingPhaseResult: ChapterWritingPhaseResult = {
             phase: RESEARCH_PHASES.CHAPTER_WRITING,
             isPhaseComplete: true,
             isFinalOutput: false,
             chapterTitle: nextChapterTitle,
-            content
+            content,
           };
-          
+
           yield chapterWritingPhaseResult;
-          
+
           // The state is already updated by the writing node, just need to update the phase
           state = {
             ...chapterWritingResult,
-            currentPhase: RESEARCH_PHASES.CHAPTER_WRITING
+            currentPhase: RESEARCH_PHASES.CHAPTER_WRITING,
           };
-          
+
           // Clear current chapter if all are completed
           if (state.progress.completedChapters >= state.progress.totalChapters) {
             state = {
               ...state,
-              currentChapterTitle: null
+              currentChapterTitle: null,
             };
           }
         }
 
         // Complete phase
-        const finalResult: CompletePhaseResult = {
+        const completePhaseResult: CompletePhaseResult = {
           phase: RESEARCH_PHASES.COMPLETE,
           isPhaseComplete: true,
-          isFinalOutput: true
+          isFinalOutput: true,
         };
-        
-        // Update state to complete
-        state = {
-          ...state,
-          currentPhase: RESEARCH_PHASES.COMPLETE
-        };
-        
-        yield finalResult;
 
+        yield completePhaseResult;
       } catch (error) {
-        console.error('Error in research graph:', error);
+        console.error("Error in research graph:", error);
         throw error;
       }
-    }
+    },
   };
-} 
+}

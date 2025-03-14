@@ -58,3 +58,5 @@ src/src/features/deep-research/services/python/output_logs/
 /scripts/data-migration/processed_JSON/
 /scripts/data-migration/node_modules/
 /scripts/
+
+/functions/*.log
