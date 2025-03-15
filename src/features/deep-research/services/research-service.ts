@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getFirestore, doc, setDoc, onSnapshot, Unsubscribe, DocumentSnapshot } from 'firebase/firestore';
 import { useAuthStore } from '@/features/auth/stores/auth-store';
+import { Chapter } from '../types/research';
 
 // Simplified types
 export interface ResearchRequest {
@@ -29,7 +30,7 @@ export interface ResearchSessionData {
     totalChapters: number;
     completedChapters: number;
   };
-  chapters?: any[];
+  chapters?: Chapter[];
   error?: string;
 }
 
@@ -167,13 +168,6 @@ export class ResearchService {
     if (!data || data.status === 'idle') return 0;
     if (data.status === 'completed') return 100;
     if (data.status === 'error') return 0;
-    
-    // Phase weights for progress calculation
-    const phaseWeights = {
-      'initial_research': 15,   // Initial research is 15% of total
-      'planning': 15,          // Planning is 15% of total
-      // Remaining 70% is distributed among chapters (research and writing phases)
-    };
     
     // If we have chapter-specific information, use that for most accurate progress
     if (data.chapters && Array.isArray(data.chapters) && data.chapters.length > 0) {

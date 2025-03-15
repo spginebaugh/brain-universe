@@ -5,9 +5,9 @@ import {
   ResearchService,
   ResearchRequest,
   ResearchSessionData,
-  ResearchStatus
 } from '../services/research-service';
 import { useAuthStore } from '@/features/auth/stores/auth-store';
+import { Chapter } from '../types/research';
 
 interface UseResearchReturn {
   isLoading: boolean;
@@ -15,7 +15,7 @@ interface UseResearchReturn {
   progress: number;
   currentPhase: string;
   sessionId: string | null;
-  chapters: any[];
+  chapters: Chapter[];
   startResearch: (request: ResearchRequest) => Promise<void>;
 }
 
