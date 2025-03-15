@@ -3,6 +3,7 @@ import { JsonOutputParser } from "@langchain/core/output_parsers";
 import { HumanMessage } from "@langchain/core/messages";
 import { AIRoadmapInput, AIRoadmapResponse, RoadmapContent } from "../types/ai-roadmap-types.js";
 import { roadmapPromptTemplate } from "../utils/prompt-templates.js";
+import { safeJsonParse, preprocessLatexInObject } from "../../utils";
 
 /**
  * Validates the structure of the roadmap content returned by the AI
@@ -69,9 +70,30 @@ export async function generateRoadmap(
     const response = await model.invoke([message]);
 
     try {
-      // Use the parser to parse the response
+      // Use the parser to parse the response with additional safety for LaTeX content
       const responseContent = response.content.toString();
-      const roadmapContent = await parser.parse(responseContent);
+
+      // First try using the standard parser
+      let roadmapContent: RoadmapContent;
+      try {
+        roadmapContent = await parser.parse(responseContent);
+      } catch (standardParseError) {
+        console.warn("Standard JSON parsing failed, trying with LaTeX-safe parser:", standardParseError);
+
+        // If that fails, use our custom safe parser
+        const parsedResult = safeJsonParse(responseContent);
+
+        // Check if we got an error object back from the safe parser
+        if (parsedResult && "error" in parsedResult) {
+          throw new Error(`Safe JSON parsing failed: ${(parsedResult as any).originalError}`);
+        }
+
+        // Cast to RoadmapContent after validation
+        roadmapContent = parsedResult as RoadmapContent;
+      }
+
+      // Pre-process any LaTeX content in the parsed object
+      roadmapContent = preprocessLatexInObject(roadmapContent) as RoadmapContent;
 
       // Validate the response structure
       if (!validateRoadmapContent(roadmapContent, input.numberOfTopics)) {

@@ -5,6 +5,7 @@ import { StructuredOutputParser } from "@langchain/core/output_parsers";
 import { z } from "zod";
 import { ResearchState } from "../../../types/research";
 import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import { safeJsonParse } from "../../../../utils";
 
 // Define schema for structured output
 const querySchema = z.object({
@@ -81,7 +82,7 @@ export function planWebSearchNode(
               return resultStr;
             }
             if (typeof resultStr === "string") {
-              return JSON.parse(resultStr);
+              return safeJsonParse(resultStr);
             }
             return [];
           } catch (error) {

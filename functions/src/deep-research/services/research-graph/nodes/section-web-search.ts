@@ -7,6 +7,8 @@ import { z } from "zod";
 import { ResearchState } from "../../../types/research";
 import { SearchOutput } from "../../../types/parser-types";
 import { OPENAI_API_KEY } from "../../../config";
+import { safeJsonParse, safeJsonStringify } from "../../../../utils";
+
 // Define schema for structured output
 const querySchema = z.object({
   query: z.string().describe("The search query to gather information for the chapter"),
@@ -116,7 +118,7 @@ export function sectionWebSearchNode(searchTool: TavilySearchResults) {
               return resultStr;
             }
             if (typeof resultStr === "string") {
-              return JSON.parse(resultStr);
+              return safeJsonParse(resultStr);
             }
             return [];
           } catch (error) {
@@ -153,7 +155,7 @@ export function sectionWebSearchNode(searchTool: TavilySearchResults) {
         return {
           currentChapter: input.chapter,
           sourceStr,
-          content: JSON.stringify(searchOutput),
+          content: safeJsonStringify(searchOutput),
         };
       } catch (error) {
         console.error("Search error:", error);

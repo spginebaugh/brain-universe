@@ -8,7 +8,6 @@ import { DeepResearchConfig } from "../config";
 import { ResearchFirestoreService } from "./research-firestore-service";
 import {
   ResearchState,
-  ResearchPhase,
   RESEARCH_PHASES,
   PhaseResult,
   Chapter,
@@ -131,28 +130,6 @@ export async function runResearchProcess(
   try {
     // Initialize logger
     const firebaseLogger = new FirebaseLogger(userId, sessionId);
-
-    // Initialize models with API keys and callbacks
-    const plannerModel = new ChatOpenAI({
-      modelName: config.models.plannerModel,
-      temperature: 0.7,
-      openAIApiKey: config.openai.apiKey,
-      callbacks: [firebaseLogger],
-    });
-
-    const writerModel = new ChatOpenAI({
-      modelName: config.models.writerModel,
-      temperature: 0.7,
-      openAIApiKey: config.openai.apiKey,
-      callbacks: [firebaseLogger],
-    });
-
-    // Initialize tools with API keys and callbacks
-    const searchTool = new TavilySearchResults({
-      apiKey: config.tavily.apiKey,
-      callbacks: [firebaseLogger],
-      maxResults: 5,
-    });
 
     // Research config derived from the DeepResearchConfig
     const researchConfig = {

@@ -13,6 +13,7 @@ import {
   Chapter,
 } from "../../types/research";
 import { BaseCallbackHandler } from "@langchain/core/callbacks/base";
+import { safeJsonParse } from "../../../utils";
 
 // Node implementations will be imported from separate files
 import { planWebSearchNode } from "./nodes/plan-web-search";
@@ -164,7 +165,7 @@ export function buildResearchGraph(
           const chapterResearchResult = await chapterResearchNode.invoke(state, { callbacks });
 
           // Parse the search results from JSON string
-          const searchOutput = JSON.parse(chapterResearchResult.content);
+          const searchOutput = safeJsonParse(chapterResearchResult.content);
 
           // Extract research data
           const queries = searchOutput.queries || [];

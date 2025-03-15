@@ -4,6 +4,7 @@ import { PromptTemplate } from "@langchain/core/prompts";
 import { StructuredOutputParser } from "@langchain/core/output_parsers";
 import { z } from "zod";
 import { ResearchState, SearchResult } from "../../../types/research";
+import { safeJsonStringify } from "../../../../utils";
 
 /**
  * Define schema for structured output
@@ -94,12 +95,12 @@ export function generatePlanNode(model: ChatOpenAI) {
         plannedChapters: chaptersWithStatus,
         completedChapters: [],
         currentChapter: null,
-        content: JSON.stringify({
+        content: safeJsonStringify({
           outline: {
             chapters: chaptersWithStatus.map((c: any) => ({
               title: c.title,
               description: c.description,
-              subTopicNames: c.subTopicNames,
+              subTopics: c.subTopicNames,
             })),
           },
         }),
