@@ -15,8 +15,8 @@ const firestoreService = new ResearchFirestoreService();
 
 /**
  * Cloud function to run deep research
- * This is an HTTP callable function that starts a research session
- * The actual research is performed within this function, and progress is tracked in Firestore
+ * This is an HTTP callable function that performs a complete research session
+ * The research is performed within this function with Firestore tracking progress
  */
 export const runDeepResearch = onCall({
   secrets: [OPENAI_API_KEY, TAVILY_API_KEY, LANGSMITH_API_KEY],
@@ -59,32 +59,25 @@ export const runDeepResearch = onCall({
     // Create config using secrets
     const config = createDeepResearchConfig();
 
-    // Create response - we'll start the actual research process in a background task
+    // Create response object
     const response: ResearchResponse = {
       success: true,
       sessionId: session.id,
     };
 
-    // Start the research process in the background (using a top-level await)
-    (async () => {
-      try {
-        // Import the actual research service - we'll implement this in another file
-        // This is imported here to avoid circular dependencies
-        const { runResearchProcess } = await import("./services/research-service");
+    // Import the research service
+    const { runResearchProcess } = await import("./services/research-service");
 
-        // Run the research process
-        await runResearchProcess(
-          userId,
-          session.id,
-          config,
-          firestoreService,
-        );
-
+    // Return a promise chain that includes the long-running work
+    return runResearchProcess(userId, session.id, config, firestoreService)
+      .then(() => {
         logger.info("Research process completed successfully", {
           uid: userId,
           sessionId: session.id,
         });
-      } catch (error) {
+        return response;
+      })
+      .catch((error) => {
         logger.error("Research process failed", {
           uid: userId,
           sessionId: session.id,
@@ -92,16 +85,18 @@ export const runDeepResearch = onCall({
         });
 
         // Update session with error
-        await firestoreService.failSession(
+        return firestoreService.failSession(
           userId,
           session.id,
           error instanceof Error ? error.message : "Unknown error",
-        );
-      }
-    })();
-
-    // Return the response immediately
-    return response;
+        ).then(() => {
+          return {
+            success: false,
+            sessionId: session.id,
+            error: error instanceof Error ? error.message : "Unknown error",
+          };
+        });
+      });
   } catch (error) {
     logger.error("Deep research request failed", {
       error: error instanceof Error ? error.message : "Unknown error",

@@ -34,6 +34,7 @@ export class DeepResearchRoadmapService {
   private generatedSubtopicIds: Record<string, Record<string, string>> = {};
   
   constructor(userId: string) {
+    // Use the existing researchService singleton from useResearch
     this.researchService = new ResearchService();
     this.graphService = new GraphService(userId);
   }
@@ -96,16 +97,29 @@ export class DeepResearchRoadmapService {
         numberOfChapters: input.numberOfChapters
       };
       
-      // Start the research process - this now uses Firebase cloud functions
-      // We'll get events from Firestore in real-time as the cloud function processes the research
+      // Get the existing session ID from the store - this avoids creating a duplicate research session
+      const useExistingSession = !!store.sessionId;
+      let sessionId = store.sessionId;
+      
+      // If we don't have a session ID yet, start a new research process
       let lastState: ResearchState | null = null;
       
-      for await (const event of this.researchService.startResearch(researchRequest)) {
-        // Check if we've been cancelled
-        if (this.abortController?.signal.aborted) {
-          console.log('Research was cancelled');
-          break;
-        }
+      if (!useExistingSession) {
+        console.log('Creating new research session');
+        // Set the session ID in the store
+        for await (const event of this.researchService.startResearch(researchRequest)) {
+          // Check if we've been cancelled
+          if (this.abortController?.signal.aborted) {
+            console.log('Research was cancelled');
+            break;
+          }
+          
+          // Update session ID if it was newly created
+          if (!sessionId && event.sessionId) {
+            sessionId = event.sessionId;
+            store.setSessionId(sessionId);
+            console.log('New research session created with ID:', sessionId);
+          }
         
         if (event.type === 'progress') {
           const chapters = event.chapters;
@@ -234,6 +248,12 @@ export class DeepResearchRoadmapService {
           store.setIsLoading(false);
         }
       }
+    } else {
+      console.log('Using existing research session:', sessionId);
+      // Just set progress and continue with node generation
+      store.setProgress(50);
+      store.setCurrentPhaseLabel('Processing research results...');
+    }
       
       // If we have a complete state, create all the remaining nodes
       if (lastState) {

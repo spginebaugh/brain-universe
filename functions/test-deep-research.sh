@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Test script for Deep Research function
+# This script calls the deep research cloud function with proper authentication
+
 # Colors for better readability
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -27,152 +30,131 @@ print_warning() {
   echo -e "${YELLOW}! $1${NC}"
 }
 
-# The URL of your emulated function - using the emulator endpoint
-FUNCTION_URL="http://127.0.0.1:5001/brainuniverse/us-central1/runDeepResearch"
+# Check if jq is installed
+if ! command -v jq &> /dev/null; then
+  print_error "jq is not installed. Please install it first."
+  echo "On Ubuntu/Debian: sudo apt install jq"
+  echo "On MacOS: brew install jq"
+  exit 1
+fi
 
-# Check if the required API keys are set
-check_api_keys() {
-  print_header "Checking Required API Keys"
-  
-  local missing_keys=0
-  
-  # Check OpenAI API Key
-  if [ -z "$OPENAI_API_KEY" ]; then
-    print_warning "OPENAI_API_KEY is not set"
-    read -p "Enter your OpenAI API key: " api_key
-    export OPENAI_API_KEY="$api_key"
-    missing_keys=$((missing_keys+1))
-  else
-    print_success "OPENAI_API_KEY is set"
-  fi
-  
-  # Check Tavily API Key
-  if [ -z "$TAVILY_API_KEY" ]; then
-    print_warning "TAVILY_API_KEY is not set"
-    read -p "Enter your Tavily API key: " api_key
-    export TAVILY_API_KEY="$api_key"
-    missing_keys=$((missing_keys+1))
-  else
-    print_success "TAVILY_API_KEY is set"
-  fi
-  
-  # Check LangSmith API Key
-  if [ -z "$LANGSMITH_API_KEY" ]; then
-    print_warning "LANGSMITH_API_KEY is not set"
-    read -p "Enter your LangSmith API key: " api_key
-    export LANGSMITH_API_KEY="$api_key"
-    missing_keys=$((missing_keys+1))
-  else
-    print_success "LANGSMITH_API_KEY is set"
-  fi
-  
-  if [ $missing_keys -gt 0 ]; then
-    print_warning "Set $missing_keys missing API keys"
-  else
-    print_success "All required API keys are set"
-  fi
-}
-
-# Get an auth token from the emulator
-get_auth_token() {
-  print_header "Getting Auth Token"
-  
-  # Check if the auth-emulator-setup script exists
-  if [ -f "scripts/auth-emulator-setup.ts" ]; then
-    # Run the emulator token script
-    echo "Running auth emulator setup script..."
-    npx ts-node scripts/auth-emulator-setup.ts
-  else
-    echo "Running emulator token command..."
-    npm run emulator-token
-  fi
-  
-  print_warning "Copy the token from above and set it as an environment variable with:"
-  echo -e "${YELLOW}export AUTH_TOKEN=\"your-token-here\"${NC}"
-  
-  # Check if AUTH_TOKEN is set
+# Check for authentication token
+check_auth_token() {
   if [ -z "$AUTH_TOKEN" ]; then
     print_warning "AUTH_TOKEN environment variable is not set"
-    read -p "Would you like to set it now? (y/n): " set_token
+    print_warning "To get a token, run: npm run emulator-token"
     
-    if [[ $set_token == "y" ]]; then
-      read -p "Paste the token here: " token
-      export AUTH_TOKEN="$token"
-      print_success "AUTH_TOKEN has been set for this session"
+    # Check if .env file exists and try to load it
+    if [ -f "./.env" ]; then
+      print_warning "Attempting to load AUTH_TOKEN from .env file..."
+      export $(grep -v '^#' .env | grep AUTH_TOKEN)
+      
+      if [ -z "$AUTH_TOKEN" ]; then
+        print_error "AUTH_TOKEN not found in .env file"
+        read -p "Would you like to set it now? (y/n): " set_token
+        
+        if [[ $set_token == "y" ]]; then
+          read -p "Paste the token here: " token
+          export AUTH_TOKEN="$token"
+          print_success "AUTH_TOKEN has been set for this session"
+        else
+          print_error "Cannot proceed without AUTH_TOKEN"
+          exit 1
+        fi
+      else
+        print_success "AUTH_TOKEN loaded from .env file"
+      fi
     else
-      print_warning "Proceeding without AUTH_TOKEN"
+      print_error "No .env file found and no AUTH_TOKEN set"
+      exit 1
     fi
   else
-    print_success "AUTH_TOKEN is already set"
+    print_success "AUTH_TOKEN is set"
   fi
 }
 
-# Create a test payload file for the deep research function
-create_test_payload() {
-  print_header "Creating Test Payload"
-  
-  cat > deep-research-payload.json << EOF
-{
-  "data": {
-    "query": "The history and evolution of artificial intelligence",
-    "numberOfChapters": 3
-  }
-}
-EOF
-  
-  print_success "Created deep-research-payload.json"
-}
+print_header "Testing Deep Research Function"
 
-# Test the runDeepResearch function
-test_deep_research_function() {
-  print_header "Testing runDeepResearch Function"
+# Check for auth token
+check_auth_token
+
+# Use the payload from deep-research-payload.json
+PAYLOAD=$(cat ./deep-research-payload.json)
+
+# Echo the request being made
+print_header "Request Payload"
+echo "$PAYLOAD" | jq .
+
+# Set the correct URL based on local or production mode
+if [ "$1" == "--local" ] || [ "$1" == "-l" ]; then
+  # For local emulator testing
+  print_header "Using Local Firebase Emulator"
+  FUNCTION_URL="http://127.0.0.1:5001/brainuniverse/us-central1/runDeepResearch"
+else
+  # For production environment
+  print_header "Using Production Firebase Function"
+  FUNCTION_URL="https://us-central1-brain-universe.cloudfunctions.net/runDeepResearch"
+fi
+
+print_warning "Sending request to $FUNCTION_URL..."
+
+# Make the request to the cloud function
+RESPONSE=$(curl -s -X POST \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $AUTH_TOKEN" \
+  -d "$PAYLOAD" \
+  "$FUNCTION_URL")
+
+# Print raw response
+print_header "Raw Response"
+echo "$RESPONSE"
+
+# Check if response can be parsed as JSON
+if echo "$RESPONSE" | jq . &> /dev/null; then
+  print_header "Formatted Response"
+  echo "$RESPONSE" | jq .
   
-  # Check API keys
-  check_api_keys
-  
-  # Create test payload
-  create_test_payload
-  
-  # Run the test
-  print_warning "Sending request to runDeepResearch function..."
-  
-  # Check if AUTH_TOKEN is set
-  if [ -z "$AUTH_TOKEN" ]; then
-    echo "No AUTH_TOKEN environment variable found."
-    echo "Attempting to proceed without authentication (this will likely fail)..."
-    
-    # Proceed without auth token for demo purposes
-    curl -v -X POST "${FUNCTION_URL}" \
-      -H "Content-Type: application/json" \
-      -d @deep-research-payload.json
+  # Try different JSON paths for success field based on Firebase function response structure
+  # First check for the emulator format with .result property
+  if echo "$RESPONSE" | jq -e '.result.success' &> /dev/null; then
+    SUCCESS=$(echo "$RESPONSE" | jq -r '.result.success')
+    SESSION_ID=$(echo "$RESPONSE" | jq -r '.result.sessionId')
+    ERROR=$(echo "$RESPONSE" | jq -r '.result.error // "Unknown error"')
+    print_warning "Using emulator response format (.result.success)"
+  # Then check for direct success property (production format)
+  elif echo "$RESPONSE" | jq -e '.success' &> /dev/null; then
+    SUCCESS=$(echo "$RESPONSE" | jq -r '.success')
+    SESSION_ID=$(echo "$RESPONSE" | jq -r '.sessionId')
+    ERROR=$(echo "$RESPONSE" | jq -r '.error // "Unknown error"')
+    print_warning "Using production response format (.success)"
+  # Finally check for data property (alternative format)
+  elif echo "$RESPONSE" | jq -e '.data.success' &> /dev/null; then
+    SUCCESS=$(echo "$RESPONSE" | jq -r '.data.success')
+    SESSION_ID=$(echo "$RESPONSE" | jq -r '.data.sessionId')
+    ERROR=$(echo "$RESPONSE" | jq -r '.data.error // "Unknown error"')
+    print_warning "Using alternative response format (.data.success)"
   else
-    # Send the request with authentication
-    echo "Sending authenticated request to emulator endpoint..."
-    curl -v -X POST "${FUNCTION_URL}" \
-      -H "Content-Type: application/json" \
-      -H "Authorization: Bearer ${AUTH_TOKEN}" \
-      -d @deep-research-payload.json
+    SUCCESS="false"
+    ERROR="Could not parse success status from response"
+    print_warning "No known success field found in response"
   fi
-  
-  echo ""
-  print_success "Test request sent"
-  print_warning "Check the Firebase Emulator UI for function logs"
-}
 
-# Main function
-main() {
-  print_header "Deep Research Function Emulator Test"
-  
-  # Get an auth token
-  get_auth_token
-  
-  # Test the runDeepResearch function
-  test_deep_research_function
-  
-  print_header "Test Completed"
-  print_warning "Note: The research process runs in the background"
-  print_warning "Check the Firebase Emulator UI logs to monitor progress"
-}
-
-# Run the main function
-main 
+  if [ "$SUCCESS" == "true" ]; then
+    print_header "Result"
+    print_success "Research process initiated successfully!"
+    print_success "Session ID: $SESSION_ID"
+    print_warning "Use the watch-logs.sh script to monitor the progress of this research session:"
+    echo "$ ./watch-logs.sh"
+  else
+    print_header "Error"
+    print_error "Research process failed: $ERROR"
+    exit 1
+  fi
+else
+  print_header "Error"
+  print_error "Response is not valid JSON"
+  print_warning "This could indicate an error with the Firebase emulator or authentication issues"
+  print_warning "Make sure the emulator is running: firebase emulators:start"
+  print_warning "And that you have a valid authentication token: npm run emulator-token"
+  exit 1
+fi

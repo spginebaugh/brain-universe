@@ -114,6 +114,20 @@ export async function runResearchProcess(
   // Create the initial state from the session
   let state: ResearchState = session.state;
 
+  // Set up heartbeat interval (every 5 minutes)
+  const heartbeatInterval = setInterval(async () => {
+    try {
+      await firestoreService.updateHeartbeat(userId, sessionId);
+      logger.debug("Heartbeat updated", { userId, sessionId });
+    } catch (error) {
+      logger.error("Failed to update heartbeat", {
+        userId,
+        sessionId,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }, 5 * 60 * 1000); // 5 minutes
+
   try {
     // Initialize logger
     const firebaseLogger = new FirebaseLogger(userId, sessionId);
@@ -168,18 +182,35 @@ export async function runResearchProcess(
       logger.info(`Research phase completed: ${phaseResult.phase}`, {
         userId,
         sessionId,
+        phase: phaseResult.phase,
+        timestamp: new Date().toISOString(),
       });
 
       // Update state based on the phase result
       state = updateStateFromPhaseResult(state, phaseResult);
 
-      // Update session in Firestore
+      // Update session in Firestore with more detailed progress
       await firestoreService.updateSessionWithPhaseResult(
         userId,
         sessionId,
         phaseResult,
         state,
       );
+
+      // Log detailed progress
+      logger.info("Research progress updated", {
+        userId,
+        sessionId,
+        phase: phaseResult.phase,
+        progress: {
+          completedPhases: Object.keys(state).filter((key) =>
+            RESEARCH_PHASES[key as keyof typeof RESEARCH_PHASES] !== undefined,
+          ).length,
+          totalPhases: Object.keys(RESEARCH_PHASES).length,
+          currentPhase: state.currentPhase,
+          timestamp: new Date().toISOString(),
+        },
+      });
     }
 
     // Research is complete
@@ -192,12 +223,14 @@ export async function runResearchProcess(
     logger.info("Research process completed successfully", {
       userId,
       sessionId,
+      completionTime: new Date().toISOString(),
     });
   } catch (error) {
     logger.error("Research process failed", {
       userId,
       sessionId,
       error: error instanceof Error ? error.message : "Unknown error",
+      failureTime: new Date().toISOString(),
     });
 
     // Update session with error
@@ -209,6 +242,9 @@ export async function runResearchProcess(
 
     // Re-throw the error
     throw error;
+  } finally {
+    // Clear heartbeat interval
+    clearInterval(heartbeatInterval);
   }
 }
 

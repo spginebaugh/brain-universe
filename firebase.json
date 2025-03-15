@@ -30,7 +30,8 @@
       "port": 9099
     },
     "functions": {
-      "port": 5001
+      "port": 5001,
+      "allowExternalNetwork": true
     },
     "firestore": {
       "port": 8080

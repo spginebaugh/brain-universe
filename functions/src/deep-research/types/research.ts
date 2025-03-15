@@ -1,12 +1,36 @@
 import { z } from "zod";
 
+// Testing types for emulator mode only
+export interface TestApiKeys {
+  openai_api_key?: string;
+  tavily_api_key?: string;
+  langsmith_api_key?: string;
+}
+
 // Base types
 export interface ResearchRequest {
   query: string;
   numberOfChapters?: number;
   sessionId?: string;
   userId: string; // Added userId for Firestore storage
+  _test_keys?: TestApiKeys; // Only for local development/testing
 }
+
+// Schema for validating the test keys
+export const testApiKeysSchema = z.object({
+  openai_api_key: z.string().optional(),
+  tavily_api_key: z.string().optional(),
+  langsmith_api_key: z.string().optional(),
+});
+
+// Update the request schema to include test keys
+export const researchRequestSchema = z.object({
+  query: z.string(),
+  numberOfChapters: z.number().optional().default(5),
+  sessionId: z.string().optional(),
+  userId: z.string(),
+  _test_keys: testApiKeysSchema.optional(),
+});
 
 export interface FeedbackRequest {
   sessionId: string;
@@ -178,12 +202,6 @@ export type PhaseResult =
   | CompletePhaseResult;
 
 // Zod schemas for validation
-export const researchRequestSchema = z.object({
-  query: z.string().min(1),
-  numberOfChapters: z.number().optional().default(6),
-  userId: z.string(),
-});
-
 export const feedbackRequestSchema = z.object({
   sessionId: z.string().uuid(),
   feedback: z.string().min(1),

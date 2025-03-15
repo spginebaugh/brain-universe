@@ -153,11 +153,24 @@ export function useDeepResearchRoadmap({
     setIsLoading(true);
     
     try {
+      // First, perform the research using the useResearch hook's startResearch
+      // This will make the cloud function API call
+      console.log('Starting research process');
       await startResearch(request);
-      setSessionId(currentSessionId);
+      
+      // After research is started, update the sessionId in our store
+      if (currentSessionId) {
+        console.log('Setting session ID:', currentSessionId);
+        setSessionId(currentSessionId);
+      } else {
+        console.warn('No current session ID available after starting research');
+      }
+      
+      // Start polling for updates
       setupPollingInterval();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to start deep research';
+      console.error('Error in startDeepResearch:', errorMessage);
       setError(errorMessage);
       setIsLoading(false);
     }

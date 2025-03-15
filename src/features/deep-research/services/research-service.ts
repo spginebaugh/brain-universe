@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { getFirestore, collection, onSnapshot, Unsubscribe, CollectionReference, QuerySnapshot, DocumentChange } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, Unsubscribe, DocumentSnapshot } from 'firebase/firestore';
 import {
   ResearchRequest,
   ResearchEvent,
@@ -66,17 +66,16 @@ export class ResearchService {
       
       // Set up a listener for Firestore updates
       const db = getFirestore();
-      const researchEventsCollection = collection(
+      const researchDocRef = doc(
         db, 
         'users', 
         userId, 
-        'researchSessions', 
-        sessionId, 
-        'events'
-      ) as CollectionReference<ResearchEvent>;
+        'research', 
+        sessionId
+      );
       
       // Use a Promise to control the generator flow
-      yield* this.setupFirestoreListener(researchEventsCollection, sessionId);
+      yield* this.setupFirestoreListener(researchDocRef, sessionId);
       
       // Wait for the function call to complete (this won't block the generator)
       const result = await functionPromise;
@@ -110,10 +109,10 @@ export class ResearchService {
   }
   
   /**
-   * Sets up a listener for Firestore events and yields them as they arrive
+   * Sets up a listener for Firestore document updates and yields events as they arrive
    */
   private async *setupFirestoreListener(
-    eventsCollection: CollectionReference<ResearchEvent>, 
+    researchDocRef: any, 
     sessionId: string
   ): AsyncGenerator<ResearchEvent> {
     const store = useResearchStore.getState();
@@ -125,33 +124,41 @@ export class ResearchService {
       const eventQueue: ResearchEvent[] = [];
       let isComplete = false;
       
-      // Set up the listener
+      // Set up the listener for the document
       const unsubscribe: Unsubscribe = onSnapshot(
-        eventsCollection,
-        (snapshot: QuerySnapshot<ResearchEvent>) => {
-          snapshot.docChanges().forEach((change: DocumentChange<ResearchEvent>) => {
-            if (change.type === 'added') {
-              const event = change.doc.data();
+        researchDocRef,
+        (docSnapshot: DocumentSnapshot) => {
+          if (!docSnapshot.exists()) {
+            console.log("Research document does not exist yet");
+            return;
+          }
+          
+          const data = docSnapshot.data();
+          if (!data) return;
+          
+          // Check for phase results in the document
+          const phaseResults = data.phaseResults;
+          if (phaseResults) {
+            // Get the current phase from the document
+            const currentPhase = data.currentPhase;
+            if (currentPhase && phaseResults[currentPhase]) {
+              const phaseResult = phaseResults[currentPhase] as PhaseResult;
               
-              // Process the event through the store
-              // For Firebase events, we need to handle them differently 
-              // since they may not have the exact same structure as PhaseResult
-              if ('phase' in event) {
-                const processedEvent = store.processPhaseResult(sessionId, event as unknown as PhaseResult);
-                
-                // Add to queue
-                eventQueue.push(processedEvent);
-                
-                // Check if this is the final event
-                if (event.isFinalOutput || event.isProcessComplete) {
-                  isComplete = true;
-                }
+              // Process the phase result through the store
+              const processedEvent = store.processPhaseResult(sessionId, phaseResult);
+              
+              // Add to queue
+              eventQueue.push(processedEvent);
+              
+              // Check if this is the final phase
+              if (phaseResult.isFinalOutput || phaseResult.isProcessComplete) {
+                isComplete = true;
               }
             }
-          });
+          }
         },
         (error: Error) => {
-          console.error('Error listening to research events:', error);
+          console.error('Error listening to research document:', error);
           reject(error);
         }
       );

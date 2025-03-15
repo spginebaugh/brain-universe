@@ -138,4 +138,21 @@ export class ResearchFirestoreService {
 
     return doc.data() as ResearchSession;
   }
+
+  /**
+   * Updates the heartbeat timestamp for a research session
+   * This is used to track if the function is still running
+   */
+  async updateHeartbeat(
+    userId: string,
+    sessionId: string,
+  ): Promise<void> {
+    const sessionRef = db.collection("users").doc(userId)
+      .collection("research").doc(sessionId);
+
+    await sessionRef.update({
+      lastHeartbeat: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+  }
 }
