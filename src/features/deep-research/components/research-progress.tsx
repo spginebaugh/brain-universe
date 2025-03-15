@@ -17,14 +17,11 @@ import {
 export function ResearchProgress() {
   const [query, setQuery] = useState('');
   const [numberOfChapters, setNumberOfChapters] = useState(6);
-  const { isLoading, error, currentSessionId, getSession, startResearch, chapters } = useResearch();
+  const { isLoading, error, sessionId, startResearch, chapters, progress, currentPhase } = useResearch();
   
-  // Get session directly
-  const session = currentSessionId ? getSession(currentSessionId) : undefined;
-  console.log('Current session in component:', session); // Debug log
-  
-  // Use chapters from the hook, which now gets them from state.chapters
-  console.log('Chapters:', chapters); // Debug log
+  // Log debug info
+  console.log('Research progress:', { sessionId, progress, currentPhase });
+  console.log('Chapters:', chapters);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,9 +43,10 @@ export function ResearchProgress() {
   console.log('Render state:', { 
     isLoading, 
     error, 
-    currentSessionId, 
+    sessionId, 
     chaptersLength: chapters.length,
-    availableSessions: session ? 'Session found' : 'No session'
+    progress,
+    currentPhase
   });
 
   // Group chapters by phase
@@ -75,7 +73,7 @@ export function ResearchProgress() {
       {error && (
         <ErrorDisplay 
           error={error} 
-          sessionId={currentSessionId ? currentSessionId : undefined} 
+          sessionId={sessionId ?? undefined} 
         />
       )}
       
@@ -84,7 +82,8 @@ export function ResearchProgress() {
       <ResearchResults 
         groupedChapters={groupedChapters}
         isLoading={isLoading}
-        researchState={session?.state}
+        progress={progress}
+        currentPhase={currentPhase}
       />
     </div>
   );

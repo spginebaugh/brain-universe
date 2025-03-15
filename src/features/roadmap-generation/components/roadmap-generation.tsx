@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogTitle, DialogFooter } from '@/shared/compo
 import { Input } from '@/shared/components/ui/input';
 import { Label } from '@/shared/components/ui/label';
 import { Button } from '@/shared/components/ui/button';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { GraphService } from '@/shared/services/firebase/graph-service';
 import { DbNode, DbEdge } from '@/shared/types/db-types';
 import { toast } from 'sonner';
@@ -15,10 +15,8 @@ import { useGraphWorkspace } from '../../graph-workspace/hooks/use-graph-workspa
 import { useAIRoadmap } from '../hooks/use-ai-roadmap';
 import { RoadmapContent } from '../types/ai-roadmap-types';
 import { useDeepResearchRoadmap } from '../../deep-research/hooks/use-deep-research-roadmap';
-import { DeepResearchRoadmapService } from '../../deep-research/services/deep-research-roadmap-service';
 import { DeepResearchRoadmapDialog } from '../../deep-research/components/deep-research-roadmap-dialog';
 import { RoadmapGenerationInput } from '../../deep-research/services/deep-research-roadmap-service';
-import { useDeepResearchRoadmapStore } from '../../deep-research/stores/deep-research-roadmap-store';
 
 interface RoadmapGenerationProps {
   node: Node<FlowNodeData>;
@@ -47,19 +45,16 @@ export const RoadmapGeneration = ({
   const { 
     isLoading: isDeepResearchLoading,
     error: deepResearchError,
+    progress: deepResearchProgress,
+    currentPhaseLabel: deepResearchPhase,
     startDeepResearch,
+    cancel: cancelDeepResearch,
     reset: resetDeepResearch
   } = useDeepResearchRoadmap({
     onPhaseChange: (phase, progress) => {
       console.log(`Deep research phase change: ${phase} - Progress: ${progress}%`);
     }
   });
-  
-  // Deep research roadmap service
-  const [deepResearchService, setDeepResearchService] = useState<DeepResearchRoadmapService | null>(null);
-  
-  // Get the deep research store to monitor progress
-  const deepResearchStore = useDeepResearchRoadmapStore();
 
   const generateNodeStructure = async (
     isAIGenerated: boolean,
@@ -392,26 +387,15 @@ export const RoadmapGeneration = ({
       toast.error('Parent graph not found');
       return;
     }
-
-    // Create deep research service
-    const service = new DeepResearchRoadmapService(currentUser.uid);
-    setDeepResearchService(service);
     
-    // Reset the deep research store state
+    // Reset any previous state
     resetDeepResearch();
     
     // Show dialog immediately
     setIsDeepResearchDialogOpen(true);
     
-    // Start deep research in parallel with hook
     try {
-      // Start the hook for tracking state
-      await startDeepResearch({
-        query: node.data.properties.title || '',
-        numberOfChapters: numNodes
-      });
-      
-      // Generate the roadmap using the service
+      // Use the simplified hook-based approach
       const roadmapInput: RoadmapGenerationInput = {
         rootNodeId: node.id,
         rootNodePosition: node.position,
@@ -419,12 +403,11 @@ export const RoadmapGeneration = ({
         graphId: node.data.graphId,
         graphName: node.data.graphName || '',
         graphPosition: parentGraph.graphPosition,
-        numberOfChapters: numNodes,
-        userId: currentUser.uid
+        numberOfChapters: numNodes
       };
       
-      // Run the roadmap generation
-      await service.generateRoadmap(roadmapInput);
+      // Start the research using the hook
+      await startDeepResearch(roadmapInput);
       
     } catch (error) {
       console.error('Failed to generate deep research roadmap:', error);
@@ -433,10 +416,7 @@ export const RoadmapGeneration = ({
   };
 
   const handleDeepResearchCancel = () => {
-    if (deepResearchService) {
-      deepResearchService.cancel();
-    }
-    resetDeepResearch();
+    cancelDeepResearch();
     setIsDeepResearchDialogOpen(false);
   };
 
@@ -446,30 +426,6 @@ export const RoadmapGeneration = ({
     onOpenChange(false);
     onClose();
   };
-
-  // Monitor the deep research store to automatically close the dialog when finished
-  useEffect(() => {
-    if (!isDeepResearchDialogOpen) return;
-    
-    const isComplete = !deepResearchStore.isLoading && deepResearchStore.progress === 100;
-    const hasError = !!deepResearchStore.error;
-    
-    if (isComplete || hasError) {
-      // Auto-close after a short delay
-      const timer = setTimeout(() => {
-        if (isComplete) {
-          handleDeepResearchComplete();
-        }
-      }, 2000);
-      
-      return () => clearTimeout(timer);
-    }
-  }, [
-    isDeepResearchDialogOpen,
-    deepResearchStore.isLoading,
-    deepResearchStore.progress,
-    deepResearchStore.error
-  ]);
 
   return (
     <>
@@ -523,6 +479,11 @@ export const RoadmapGeneration = ({
         onOpenChange={setIsDeepResearchDialogOpen}
         onCancel={handleDeepResearchCancel}
         onComplete={handleDeepResearchComplete}
+        isLoading={isDeepResearchLoading}
+        error={deepResearchError}
+        progress={deepResearchProgress}
+        currentPhaseLabel={deepResearchPhase}
+        cancelResearch={cancelDeepResearch}
       />
     </>
   );

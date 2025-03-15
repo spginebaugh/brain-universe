@@ -1,193 +1,213 @@
 import { v4 as uuidv4 } from 'uuid';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { getFirestore, doc, onSnapshot, Unsubscribe, DocumentSnapshot } from 'firebase/firestore';
-import {
-  ResearchRequest,
-  ResearchEvent,
-  ErrorEvent,
-  RESEARCH_PHASES,
-  PhaseResult
-} from '../types/research';
-import { useResearchStore } from '../stores/research-store';
+import { getFirestore, doc, setDoc, onSnapshot, Unsubscribe, DocumentSnapshot } from 'firebase/firestore';
 import { useAuthStore } from '@/features/auth/stores/auth-store';
 
-interface FirebaseResearchResponse {
+// Simplified types
+export interface ResearchRequest {
+  query: string;
+  numberOfChapters?: number;
+  sessionId?: string;
+}
+
+export interface ResearchResponse {
   success: boolean;
   sessionId: string;
   error?: string;
 }
 
-export class ResearchService {
-  constructor() {}
+export type ResearchStatus = 'idle' | 'running' | 'completed' | 'error';
 
+export interface ResearchSessionData {
+  id: string;
+  userId: string;
+  query: string;
+  numberOfChapters: number;
+  status: ResearchStatus;
+  currentPhase?: string;
+  progress?: {
+    totalChapters: number;
+    completedChapters: number;
+  };
+  chapters?: any[];
+  error?: string;
+}
+
+export interface ResearchProgressCallback {
+  (data: ResearchSessionData): void;
+}
+
+export class ResearchService {
+  private unsubscribe: Unsubscribe | null = null;
+  
   /**
    * Starts a research process by calling the Firebase cloud function
-   * and setting up a listener for Firestore updates
+   * and returns the session ID
    */
-  async *startResearch(request: ResearchRequest): AsyncGenerator<ResearchEvent> {
-    // Get a fresh reference to the store each time
-    const store = useResearchStore.getState();
+  async startResearch(request: ResearchRequest): Promise<string> {
     const userId = useAuthStore.getState().user?.uid;
     
     if (!userId) {
-      const errorEvent: ErrorEvent = {
-        type: 'error',
-        sessionId: '',
-        phase: RESEARCH_PHASES.COMPLETE,
-        isProcessComplete: true,
-        isFinalOutput: true,
-        error: 'User not authenticated'
-      };
-      yield errorEvent;
-      return;
+      throw new Error('User not authenticated');
     }
 
     const sessionId = request.sessionId || uuidv4();
     
     try {
-      // Create a session in the store
-      store.createSession({
-        ...request,
-        sessionId
+      // Create a document in Firestore first to track progress
+      // Using a unique session ID that we can track
+      const db = getFirestore();
+      await setDoc(doc(db, 'users', userId, 'research', sessionId), {
+        id: sessionId,
+        userId,
+        query: request.query,
+        numberOfChapters: request.numberOfChapters || 5,
+        status: 'running',
+        createdAt: new Date(),
+        updatedAt: new Date()
       });
       
-      // Call the Firebase function
+      // Call the Firebase function without waiting for its result
+      // This avoids client timeout issues with long-running functions
       const functions = getFunctions();
-      const runDeepResearch = httpsCallable<ResearchRequest, FirebaseResearchResponse>(
+      const runDeepResearch = httpsCallable<ResearchRequest, ResearchResponse>(
         functions, 
         'runDeepResearch'
       );
       
-      // Call the function without waiting for it to complete
-      const functionPromise = runDeepResearch({
+      // Start the function but don't await it
+      // We'll use Firestore to track progress instead
+      console.log('Starting research function with session:', sessionId);
+      runDeepResearch({
         query: request.query,
-        numberOfChapters: request.numberOfChapters
+        numberOfChapters: request.numberOfChapters,
+        sessionId: sessionId // Pass the sessionId to the function
+      }).catch(error => {
+        // Even if we get a timeout error here, the function may still be running
+        // We'll rely on Firestore for actual status
+        console.warn('Function call returned with possible timeout:', error.message);
       });
       
-      // Set up a listener for Firestore updates
-      const db = getFirestore();
-      const researchDocRef = doc(
-        db, 
-        'users', 
-        userId, 
-        'research', 
-        sessionId
-      );
-      
-      // Use a Promise to control the generator flow
-      yield* this.setupFirestoreListener(researchDocRef, sessionId);
-      
-      // Wait for the function call to complete (this won't block the generator)
-      const result = await functionPromise;
-      console.log('Function completed with result:', result.data);
-      
-      if (!result.data.success) {
-        const errorEvent: ErrorEvent = {
-          type: 'error',
-          sessionId,
-          phase: RESEARCH_PHASES.COMPLETE,
-          isProcessComplete: true,
-          isFinalOutput: true,
-          error: result.data.error || 'Unknown error'
-        };
-        yield errorEvent;
-      }
-    } catch (error: unknown) {
-      const e = error as Error;
-      console.error("Research error:", e);
-      
-      const errorEvent: ErrorEvent = {
-        type: 'error',
-        sessionId,
-        phase: RESEARCH_PHASES.COMPLETE,
-        isProcessComplete: true,
-        isFinalOutput: true,
-        error: e.message
-      };
-      yield errorEvent;
+      // Return the session ID immediately
+      return sessionId;
+    } catch (error) {
+      console.error('Error starting research:', error);
+      throw new Error('Failed to initiate research process');
     }
   }
   
   /**
-   * Sets up a listener for Firestore document updates and yields events as they arrive
+   * Listen to research progress in Firestore
    */
-  private async *setupFirestoreListener(
-    researchDocRef: any, 
-    sessionId: string
-  ): AsyncGenerator<ResearchEvent> {
-    const store = useResearchStore.getState();
+  trackResearchProgress(
+    sessionId: string, 
+    onProgress: ResearchProgressCallback,
+    onError: (error: Error) => void
+  ): () => void {
+    const userId = useAuthStore.getState().user?.uid;
     
-    // Create a promise that will resolve when the first event is received
-    // or reject after a timeout
-    return new Promise<AsyncGenerator<ResearchEvent>>(async (resolve, reject) => {
-      // Create a queue to hold events that arrive while yielding
-      const eventQueue: ResearchEvent[] = [];
-      let isComplete = false;
-      
-      // Set up the listener for the document
-      const unsubscribe: Unsubscribe = onSnapshot(
-        researchDocRef,
-        (docSnapshot: DocumentSnapshot) => {
-          if (!docSnapshot.exists()) {
-            console.log("Research document does not exist yet");
-            return;
-          }
-          
-          const data = docSnapshot.data();
-          if (!data) return;
-          
-          // Check for phase results in the document
-          const phaseResults = data.phaseResults;
-          if (phaseResults) {
-            // Get the current phase from the document
-            const currentPhase = data.currentPhase;
-            if (currentPhase && phaseResults[currentPhase]) {
-              const phaseResult = phaseResults[currentPhase] as PhaseResult;
-              
-              // Process the phase result through the store
-              const processedEvent = store.processPhaseResult(sessionId, phaseResult);
-              
-              // Add to queue
-              eventQueue.push(processedEvent);
-              
-              // Check if this is the final phase
-              if (phaseResult.isFinalOutput || phaseResult.isProcessComplete) {
-                isComplete = true;
-              }
-            }
-          }
-        },
-        (error: Error) => {
-          console.error('Error listening to research document:', error);
-          reject(error);
+    if (!userId) {
+      onError(new Error('User not authenticated'));
+      return () => {};
+    }
+    
+    if (this.unsubscribe) {
+      this.unsubscribe();
+    }
+    
+    const db = getFirestore();
+    const docRef = doc(db, 'users', userId, 'research', sessionId);
+    
+    this.unsubscribe = onSnapshot(
+      docRef,
+      (snapshot: DocumentSnapshot) => {
+        if (!snapshot.exists()) {
+          console.log("Research document does not exist yet");
+          return;
         }
-      );
+        
+        const data = snapshot.data();
+        if (!data) return;
+        
+        // Create simplified data object
+        const sessionData: ResearchSessionData = {
+          id: sessionId,
+          userId,
+          query: data.query,
+          numberOfChapters: data.numberOfChapters || 0,
+          status: data.status,
+          currentPhase: data.currentPhase,
+          progress: data.progress,
+          chapters: data.state?.plannedChapters || data.state?.chapters ? 
+            Object.values(data.state.chapters || {}) : []
+        };
+        
+        // Call the progress callback
+        onProgress(sessionData);
+      },
+      (error: Error) => {
+        console.error('Error tracking research progress:', error);
+        onError(error);
+      }
+    );
+    
+    // Return a function to stop listening
+    return () => {
+      if (this.unsubscribe) {
+        this.unsubscribe();
+        this.unsubscribe = null;
+      }
+    };
+  }
+  
+  /**
+   * Calculate progress percentage based on current phase and completed chapters
+   */
+  calculateProgressPercentage(data: ResearchSessionData): number {
+    if (!data || data.status === 'idle') return 0;
+    if (data.status === 'completed') return 100;
+    if (data.status === 'error') return 0;
+    
+    // If we have progress data, use it
+    if (data.progress && data.progress.totalChapters > 0) {
+      const baseProgress = 20; // First 20% is planning
+      const chapterProgress = 80; // Remaining 80% is chapter completion
       
-      // Create and return the generator
-      const generator = (async function*() {
-        try {
-          // Keep yielding events until there are no more and isComplete is true
-          while (true) {
-            // Yield any events in the queue
-            while (eventQueue.length > 0) {
-              yield eventQueue.shift()!;
-            }
-            
-            // If we're done and queue is empty, exit the loop
-            if (isComplete && eventQueue.length === 0) {
-              break;
-            }
-            
-            // Wait a bit before checking again
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-        } finally {
-          // Clean up the listener when the generator is done
-          unsubscribe();
-        }
-      })();
+      const completedChapters = data.progress.completedChapters || 0;
+      const totalChapters = data.progress.totalChapters || 1;
       
-      resolve(generator);
-    });
+      const chapterPercentage = completedChapters / totalChapters;
+      return Math.min(100, baseProgress + (chapterPercentage * chapterProgress));
+    }
+    
+    // If we only have phase information, use that
+    switch (data.currentPhase) {
+      case 'initial_research': return 10;
+      case 'planning': return 20;
+      case 'chapter_research': return 40;
+      case 'chapter_writing': return 60;
+      case 'complete': return 100;
+      default: return 5;
+    }
+  }
+  
+  /**
+   * Get a friendly label for the current research phase
+   */
+  getPhaseLabel(data: ResearchSessionData): string {
+    if (!data) return 'Initializing...';
+    
+    if (data.status === 'completed') return 'Research complete';
+    if (data.status === 'error') return `Error: ${data.error || 'Unknown error'}`;
+    if (data.status === 'idle') return 'Ready to start';
+    
+    switch (data.currentPhase) {
+      case 'initial_research': return 'Initial research';
+      case 'planning': return 'Planning chapters';
+      case 'chapter_research': return 'Researching chapters';
+      case 'chapter_writing': return 'Writing chapters';
+      case 'complete': return 'Research complete';
+      default: return 'Processing...';
+    }
   }
 } 

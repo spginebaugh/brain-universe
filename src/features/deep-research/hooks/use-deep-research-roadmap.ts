@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useRef } from 'react';
-import { useResearch } from './use-research';
-import { useDeepResearchRoadmapStore } from '../stores/deep-research-roadmap-store';
-import { RESEARCH_PHASES, ResearchRequest, ResearchState } from '../types/research';
+"use client";
+
+import { useState, useCallback, useEffect } from 'react';
+import { useAuthStore } from '@/features/auth/stores/auth-store';
+import { 
+  DeepResearchRoadmapService, 
+  RoadmapGenerationInput, 
+  RoadmapGenerationProgress 
+} from '../services/deep-research-roadmap-service';
 
 interface UseDeepResearchRoadmapParams {
   onPhaseChange?: (phase: string, progress: number) => void;
@@ -10,206 +15,115 @@ interface UseDeepResearchRoadmapParams {
 export function useDeepResearchRoadmap({
   onPhaseChange
 }: UseDeepResearchRoadmapParams = {}) {
-  // Get the research functionality
-  const { 
-    startResearch, 
-    error: researchError, 
-    currentSessionId,
-    getSession
-  } = useResearch();
+  // State
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [currentPhaseLabel, setCurrentPhaseLabel] = useState('Initializing');
 
-  // Get store state and actions
-  const { 
-    isLoading,
-    error, 
-    sessionId,
-    researchState, 
-    progress,
-    currentPhaseLabel,
-    cancelRequested,
-    setIsLoading,
-    setError,
-    setSessionId,
-    setResearchState,
-    setProgress,
-    setCurrentPhaseLabel,
-    reset
-  } = useDeepResearchRoadmapStore();
-
-  // Track interval for polling
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Calculate progress based on research state
-  const calculateProgress = useCallback((state: ResearchState): number => {
-    if (!state) return 0;
-    
-    switch(state.currentPhase) {
-      case RESEARCH_PHASES.INITIAL_RESEARCH:
-        return 10;
-      
-      case RESEARCH_PHASES.PLANNING:
-        return 20;
-      
-      case RESEARCH_PHASES.CHAPTER_RESEARCH:
-      case RESEARCH_PHASES.CHAPTER_WRITING: {
-        if (state.progress.totalChapters === 0) return 20;
-        const completedPercentage = state.progress.completedChapters / state.progress.totalChapters;
-        // Scale from 20% to 90% based on chapter completion
-        return 20 + (completedPercentage * 70);
-      }
-      
-      case RESEARCH_PHASES.COMPLETE:
-        return 100;
-        
-      default:
-        return 0;
+  // Get the user ID
+  const userId = useAuthStore(state => state.user?.uid);
+  
+  // Create service ref
+  const serviceRef = useState(() => 
+    userId ? new DeepResearchRoadmapService(userId) : null
+  )[0];
+  
+  // Update service when userId changes
+  useEffect(() => {
+    if (!serviceRef && userId) {
+      // This should never happen since the state initializer should create it,
+      // but just in case, we include this check
+      console.log('Creating new research service with userId:', userId);
     }
-  }, []);
-
-  // Get phase label based on research state
-  const getPhaseLabel = useCallback((state: ResearchState): string => {
-    if (!state) return 'Initializing';
+  }, [userId, serviceRef]);
+  
+  // Handle progress updates
+  const handleProgress = useCallback((progress: RoadmapGenerationProgress) => {
+    // Update state
+    setProgress(progress.progress);
+    setCurrentPhaseLabel(progress.phase);
     
-    switch(state.currentPhase) {
-      case RESEARCH_PHASES.INITIAL_RESEARCH:
-        return 'Researching Topic';
-      
-      case RESEARCH_PHASES.PLANNING:
-        return 'Planning Chapters';
-      
-      case RESEARCH_PHASES.CHAPTER_RESEARCH:
-        return `Researching Chapter: ${state.currentChapterTitle || ''}`;
-      
-      case RESEARCH_PHASES.CHAPTER_WRITING:
-        return `Writing Chapter: ${state.currentChapterTitle || ''}`;
-      
-      case RESEARCH_PHASES.COMPLETE:
-        return 'Research Complete';
-        
-      default:
-        return 'Processing';
-    }
-  }, []);
-
-  // Poll for research updates
-  const pollResearch = useCallback(() => {
-    if (!sessionId) return;
-    
-    const session = getSession(sessionId);
-    if (!session) return;
-    
-    const { state } = session;
-    if (!state) return;
-
-    setResearchState(state);
-    
-    // Calculate progress
-    const newProgress = calculateProgress(state);
-    setProgress(newProgress);
-    
-    // Update phase label
-    const newPhaseLabel = getPhaseLabel(state);
-    setCurrentPhaseLabel(newPhaseLabel);
-    
-    // Call onPhaseChange if provided and phase changed
-    if (onPhaseChange && currentPhaseLabel !== newPhaseLabel) {
-      onPhaseChange(newPhaseLabel, newProgress);
+    // Call onPhaseChange if provided
+    if (onPhaseChange) {
+      onPhaseChange(progress.phase, progress.progress);
     }
     
-    // Check if research is complete
-    if (state.currentPhase === RESEARCH_PHASES.COMPLETE) {
-      clearPollingInterval();
+    // Handle errors
+    if (progress.error) {
+      setError(progress.error);
+    }
+    
+    // Handle completion
+    if (progress.isComplete) {
       setIsLoading(false);
     }
-  }, [
-    sessionId, 
-    getSession, 
-    setResearchState, 
-    calculateProgress, 
-    setProgress, 
-    getPhaseLabel, 
-    setCurrentPhaseLabel, 
-    onPhaseChange, 
-    currentPhaseLabel, 
-    setIsLoading
-  ]);
-
-  // Setup and clear polling interval
-  const setupPollingInterval = useCallback(() => {
-    clearPollingInterval();
-    pollingIntervalRef.current = setInterval(pollResearch, 1000);
-  }, [pollResearch]);
-
-  const clearPollingInterval = useCallback(() => {
-    if (pollingIntervalRef.current) {
-      clearInterval(pollingIntervalRef.current);
-      pollingIntervalRef.current = null;
-    }
-  }, []);
-
+  }, [onPhaseChange]);
+  
   // Start deep research roadmap generation
-  const startDeepResearch = useCallback(async (request: ResearchRequest) => {
-    reset();
+  const startDeepResearch = useCallback(async (
+    input: RoadmapGenerationInput
+  ) => {
+    if (!userId || !serviceRef) {
+      setError('User not authenticated');
+      return;
+    }
+    
     setIsLoading(true);
+    setProgress(0);
+    setCurrentPhaseLabel('Starting research...');
+    setError(null);
     
     try {
-      // First, perform the research using the useResearch hook's startResearch
-      // This will make the cloud function API call
-      console.log('Starting research process');
-      await startResearch(request);
-      
-      // After research is started, update the sessionId in our store
-      if (currentSessionId) {
-        console.log('Setting session ID:', currentSessionId);
-        setSessionId(currentSessionId);
-      } else {
-        console.warn('No current session ID available after starting research');
-      }
-      
-      // Start polling for updates
-      setupPollingInterval();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to start deep research';
-      console.error('Error in startDeepResearch:', errorMessage);
-      setError(errorMessage);
+      // Start the research process
+      const newSessionId = await serviceRef.startResearch(input, handleProgress);
+      setSessionId(newSessionId);
+    } catch (error) {
+      console.error('Failed to start deep research:', error);
+      setError(error instanceof Error ? error.message : 'Unknown error');
       setIsLoading(false);
     }
-  }, [
-    reset, 
-    setIsLoading, 
-    startResearch, 
-    setSessionId, 
-    currentSessionId, 
-    setupPollingInterval, 
-    setError
-  ]);
-
-  // Handle errors
-  useEffect(() => {
-    if (researchError) {
-      setError(researchError);
+  }, [userId, serviceRef, handleProgress]);
+  
+  // Cancel the research process
+  const cancel = useCallback(() => {
+    if (serviceRef) {
+      serviceRef.cancel();
+      setIsLoading(false);
+      setCurrentPhaseLabel('Cancelled');
     }
-  }, [researchError, setError]);
-
+  }, [serviceRef]);
+  
+  // Reset state
+  const reset = useCallback(() => {
+    setIsLoading(false);
+    setError(null);
+    setSessionId(null);
+    setProgress(0);
+    setCurrentPhaseLabel('Initializing');
+  }, []);
+  
   // Clean up on unmount
   useEffect(() => {
     return () => {
-      clearPollingInterval();
+      if (serviceRef) {
+        serviceRef.cancel();
+      }
     };
-  }, [clearPollingInterval]);
-
+  }, [serviceRef]);
+  
   return {
     // State
     isLoading,
     error,
     sessionId,
-    researchState,
     progress,
     currentPhaseLabel,
-    cancelRequested,
     
     // Actions
     startDeepResearch,
+    cancel,
     reset
   };
-} 
+}

@@ -3,7 +3,6 @@ import { Dialog, DialogContent, DialogTitle, DialogFooter } from '@/shared/compo
 import { Button } from '@/shared/components/ui/button';
 import { Progress } from '@/shared/components/ui/progress';
 import { Loader2 } from 'lucide-react';
-import { useDeepResearchRoadmapStore } from '../stores/deep-research-roadmap-store';
 
 interface DeepResearchRoadmapDialogProps {
   isOpen: boolean;
@@ -11,6 +10,11 @@ interface DeepResearchRoadmapDialogProps {
   onCancel: () => void;
   onComplete: () => void;
   showProgress?: boolean;
+  isLoading: boolean;
+  error: string | null;
+  progress: number;
+  currentPhaseLabel: string;
+  cancelResearch: () => void;
 }
 
 export function DeepResearchRoadmapDialog({
@@ -19,17 +23,12 @@ export function DeepResearchRoadmapDialog({
   onCancel,
   onComplete,
   showProgress = true,
+  isLoading,
+  error,
+  progress,
+  currentPhaseLabel,
+  cancelResearch
 }: DeepResearchRoadmapDialogProps) {
-  // Get state from the store
-  const {
-    isLoading,
-    error,
-    progress,
-    currentPhaseLabel,
-    cancelRequested,
-    requestCancel,
-  } = useDeepResearchRoadmapStore();
-
   // Handle dialog close
   const handleClose = () => {
     if (!isLoading) {
@@ -41,7 +40,7 @@ export function DeepResearchRoadmapDialog({
   // Handle cancel request
   const handleCancel = () => {
     if (isLoading) {
-      requestCancel();
+      cancelResearch();
       onCancel();
     }
   };
@@ -98,9 +97,9 @@ export function DeepResearchRoadmapDialog({
             <Button
               variant="destructive"
               onClick={handleCancel}
-              disabled={cancelRequested}
+              disabled={false}
             >
-              {cancelRequested ? 'Cancelling...' : 'Cancel'}
+              Cancel
             </Button>
           ) : (
             <Button
@@ -113,4 +112,4 @@ export function DeepResearchRoadmapDialog({
       </DialogContent>
     </Dialog>
   );
-} 
+}

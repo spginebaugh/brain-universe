@@ -602,13 +602,15 @@ export const ResearchStateDebugger: React.FC<ResearchStateDebuggerProps> = ({
 export interface ResearchResultsProps {
   groupedChapters: Record<ResearchPhase, Chapter[]>;
   isLoading: boolean;
-  researchState?: ResearchState;
+  progress: number;
+  currentPhase: string;
 }
 
 export const ResearchResults: React.FC<ResearchResultsProps> = ({
   groupedChapters,
   isLoading,
-  researchState
+  progress,
+  currentPhase
 }) => (
   <div className="space-y-4">
     <ScrollArea className="h-[600px] rounded-md border bg-gray-50">
@@ -636,6 +638,17 @@ export const ResearchResults: React.FC<ResearchResultsProps> = ({
       )}
     </ScrollArea>
     
-    <ResearchStateDebugger researchState={researchState} />
+    <div className="mt-4 p-4 border rounded-md bg-gray-50">
+      <h3 className="text-sm font-medium mb-2">Research Progress</h3>
+      <div className="h-2 w-full bg-gray-200 rounded-full mb-2">
+        <div 
+          className="h-2 bg-blue-600 rounded-full" 
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <p className="text-sm text-gray-600">
+        {progress}% complete - {currentPhase}
+      </p>
+    </div>
   </div>
 ); 

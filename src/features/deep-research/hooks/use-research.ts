@@ -1,31 +1,22 @@
 "use client";
 
 import { useState, useCallback, useEffect } from 'react';
-import { useResearchStore } from '../stores/research-store';
-import { ResearchService } from '../services/research-service';
 import {
+  ResearchService,
   ResearchRequest,
-  ResearchEvent,
-  ErrorEvent,
-  Chapter,
-  ResearchState,
-  ResearchConfig
-} from '../types/research';
-
-// Create a singleton instance of the service
-const researchService = new ResearchService();
+  ResearchSessionData,
+  ResearchStatus
+} from '../services/research-service';
+import { useAuthStore } from '@/features/auth/stores/auth-store';
 
 interface UseResearchReturn {
   isLoading: boolean;
   error: string | null;
-  chapters: Chapter[];
-  currentSessionId: string | null;
+  progress: number;
+  currentPhase: string;
+  sessionId: string | null;
+  chapters: any[];
   startResearch: (request: ResearchRequest) => Promise<void>;
-  getSession: (sessionId: string) => { 
-    state: ResearchState;
-    config: ResearchConfig;
-    events: ResearchEvent[];
-  } | undefined;
 }
 
 /**
@@ -35,89 +26,99 @@ interface UseResearchReturn {
 export function useResearch(): UseResearchReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [currentPhase, setCurrentPhase] = useState('');
+  const [sessionData, setSessionData] = useState<ResearchSessionData | null>(null);
   
-  // Get store methods
-  const { getSession, currentSession } = useResearchStore();
-
-  // Update local state when store changes
+  // Get the user ID
+  const userId = useAuthStore(state => state.user?.uid);
+  
+  // Create service ref
+  const serviceRef = useState(() => new ResearchService())[0];
+  
+  // Cleanup function for Firebase listeners
+  const [unsubscribe, setUnsubscribe] = useState<(() => void) | null>(null);
+  
   useEffect(() => {
-    if (currentSession) {
-      console.log('Current session updated:', currentSession);
-      setCurrentSessionId(currentSession);
-      
-      const session = getSession(currentSession);
-      if (session) {
-        console.log('Session found:', session);
-        
-        // Update error state if the last event was an error
-        const lastEvent = session.events[session.events.length - 1];
-        if (lastEvent && lastEvent.type === 'error') {
-          setError((lastEvent as ErrorEvent).error);
-        } else {
-          setError(null);
-        }
-        
-        // Update loading state based on session completion or in progress flag
-        setIsLoading(!session.isComplete);
-      } else {
-        console.warn('Session not found for ID:', currentSession);
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
       }
-    }
-  }, [currentSession, getSession]);
+    };
+  }, [unsubscribe]);
 
   /**
-   * Starts a new research process by:
-   * 1. Calling the Firebase Cloud Function
-   * 2. Setting up a Firestore listener for updates
-   * 3. Processing events as they arrive
+   * Starts a new research process
    */
   const startResearch = useCallback(async (request: ResearchRequest) => {
-    console.log('Starting research with request:', request);
+    if (!userId) {
+      setError('User not authenticated');
+      return;
+    }
+    
     setIsLoading(true);
     setError(null);
+    setProgress(0);
+    setCurrentPhase('Starting research...');
 
     try {
-      // All the Firebase Cloud Function and Firestore listeners setup 
-      // is handled in the service
-      let eventCount = 0;
-      for await (const event of researchService.startResearch(request)) {
-        eventCount++;
-        console.log(`Received event ${eventCount}:`, event);
-        
-        // Events are already processed and added to the store by the service
-        if (event.type === 'error') {
-          console.error('Error event received:', event);
-          setError((event as ErrorEvent).error);
-        }
-        
-        // Set loading to false when we receive the final output
-        if (event.isFinalOutput || event.isProcessComplete) {
-          console.log('Final output received, research complete');
-          setIsLoading(false);
-        }
+      // Call the cloud function
+      const newSessionId = await serviceRef.startResearch(request);
+      setSessionId(newSessionId);
+      
+      // Set up tracking
+      if (unsubscribe) {
+        unsubscribe();
       }
       
-      console.log(`Research completed with ${eventCount} events`);
-    } catch (error: unknown) {
-      const e = error as Error;
-      console.error('Error in research process:', e);
-      setError(e.message);
+      const stopTracking = serviceRef.trackResearchProgress(
+        newSessionId,
+        (data) => {
+          // Update the session data
+          setSessionData(data);
+          
+          // Update progress percentage
+          const progressPercent = serviceRef.calculateProgressPercentage(data);
+          setProgress(progressPercent);
+          
+          // Update phase label
+          const phaseLabel = serviceRef.getPhaseLabel(data);
+          setCurrentPhase(phaseLabel);
+          
+          // Update loading state
+          if (data.status === 'completed' || data.status === 'error') {
+            setIsLoading(false);
+          }
+          
+          // Update error state
+          if (data.status === 'error' && data.error) {
+            setError(data.error);
+          }
+        },
+        (error) => {
+          console.error('Error tracking research progress:', error);
+          setError(error.message);
+          setIsLoading(false);
+        }
+      );
+      
+      setUnsubscribe(() => stopTracking);
+      
+    } catch (error) {
+      console.error('Error starting research:', error);
+      setError(error instanceof Error ? error.message : 'Unknown error');
       setIsLoading(false);
     }
-  }, []);
-
-  // Get chapters from the current session
-  const chapters = currentSessionId 
-    ? Object.values(getSession(currentSessionId)?.state.chapters || {})
-    : [];
+  }, [userId, serviceRef, unsubscribe]);
 
   return {
     isLoading,
     error,
-    chapters,
-    currentSessionId,
-    startResearch,
-    getSession
+    progress,
+    currentPhase,
+    sessionId,
+    chapters: sessionData?.chapters || [],
+    startResearch
   };
-} 
+}
