@@ -223,7 +223,7 @@ export class DeepResearchRoadmapService {
             await this.generateGraph(data, input, (graphProgress) => {
               // Forward graph generation progress, but scale it from 70-100%
               onProgress({
-                progress: 70 + (graphProgress.progress * 0.3),
+                progress: Math.round(70 + (graphProgress.progress * 0.3)),
                 phase: graphProgress.phase,
                 isComplete: graphProgress.isComplete,
                 error: graphProgress.error
