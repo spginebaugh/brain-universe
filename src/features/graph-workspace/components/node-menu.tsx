@@ -3,7 +3,7 @@ import { Button } from '@/shared/components/ui/button';
 import { Node, useReactFlow, useStoreApi } from '@xyflow/react';
 import { FlowNodeData } from '../types/workspace-types';
 import { useEffect, useState } from 'react';
-import { RoadmapGeneration } from '../../roadmap-generation/components/roadmap-generation';
+import { RoadmapGeneration } from '../../simple-roadmap-generation/components/roadmap-generation';
 
 interface NodeMenuProps {
   node: Node<FlowNodeData>;
