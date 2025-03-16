@@ -108,7 +108,7 @@ templates
                     └─ edges (subcollection)
 ```
 
-## 🙏 Acknowledgements
+## �� Acknowledgements
 
 - [Next.js](https://nextjs.org/)
 - [React Flow](https://reactflow.dev/)
